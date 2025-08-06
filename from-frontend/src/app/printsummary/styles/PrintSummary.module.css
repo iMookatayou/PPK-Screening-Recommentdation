@@ -1,0 +1,108 @@
+@media print {
+  .printButtons {
+    display: none;
+  }
+
+  body {
+    margin: 0;
+    font-family: 'TH SarabunPSK', 'Sarabun', sans-serif;
+    font-size: 16pt;
+    line-height: 1.6;
+  }
+
+  .printWrapper {
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .printTable {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 1rem;
+  }
+
+  .printTable th,
+  .printTable td {
+    border: 1px solid #000;
+    padding: 8px;
+    font-size: 14pt;
+  }
+
+  .printHeader h1 {
+    text-align: center;
+    font-size: 22pt;
+    margin-bottom: 0.2em;
+  }
+}
+
+/* For screen display */
+.printWrapper {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem;
+  font-family: 'Sarabun', sans-serif;
+  color: #111;
+  background-color: #fff;
+}
+
+.printHeader {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.printedAt {
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.patientInfo {
+  margin-bottom: 2rem;
+  line-height: 1.8;
+}
+
+.printTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.printTable th,
+.printTable td {
+  border: 1px solid #333;
+  padding: 8px;
+  text-align: left;
+  font-size: 0.95rem;
+}
+
+.printTable th {
+  background-color: #f0f0f0;
+}
+
+.printButtons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 2rem;
+}
+
+@media print {
+  .printButtons {
+    display: none !important;
+  }
+}
+
+.printButtons button {
+  padding: 0.6rem 1.2rem;
+  font-size: 1rem;
+  background-color: #004080;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease-in-out;
+}
+
+.printButtons button:hover {
+  background-color: #0060c0;
+}

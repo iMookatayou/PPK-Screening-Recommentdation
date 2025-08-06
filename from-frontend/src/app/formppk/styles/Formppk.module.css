@@ -1,0 +1,257 @@
+/* Wrapper ใหญ่ */
+.formppk-wrapper {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 2rem 2.5rem;
+  font-family: 'Sarabun', sans-serif;
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.05);
+}
+
+/* Header */
+.formppk-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.formppk-title {
+  font-size: 2.2rem;
+  font-weight: 700;
+  color: #1e3a8a;
+  margin-bottom: 0.25rem;
+}
+
+.formppk-subtitle {
+  font-size: 1rem;
+  color: #4b5563;
+}
+
+/* กล่องเลือกหัวข้อ + ปุ่มล้าง (แถวเดียวกัน) */
+.formppk-question-select-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.formppk-question-select-box {
+  flex: 1;
+}
+
+.formppk-question-label {
+  font-weight: 600;
+  font-size: 1rem;
+  margin-bottom: 0.4rem;
+  color: #111827;
+  display: block;
+}
+
+/* ปุ่มล้างข้อมูล */
+.formppk-btn-clear {
+  background-color: #e11d48;
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.65rem 1.4rem;
+  border: none;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.formppk-btn-clear:hover {
+  background-color: #be123c;
+  transform: translateY(-1px);
+}
+
+.formppk-btn-clear-icon {
+  width: 18px;
+  height: 18px;
+}
+
+/* กล่องคำถามทั้งหมด (grid) */
+.formppk-questions-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+/* กล่องคำถามแต่ละข้อ */
+.formppk-question-box {
+  background-color: #f9fafb;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.formppk-question-box:hover {
+  background-color: #f3f4f6;
+}
+
+.formppk-question-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: #1f2937;
+  border-bottom: 1px solid #e5e7eb;
+  padding-bottom: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.formppk-question-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* input, select, textarea */
+.formppk-question-box input[type="text"],
+.formppk-question-box textarea,
+.formppk-question-box select {
+  font-size: 0.95rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  background-color: white;
+  width: 100%;
+  transition: border 0.2s ease;
+}
+
+.formppk-question-box input:focus,
+.formppk-question-box textarea:focus,
+.formppk-question-box select:focus {
+  border-color: #2563eb;
+  outline: none;
+}
+
+/* label, checkbox */
+.formppk-question-box label {
+  font-size: 0.95rem;
+  color: #374151;
+  display: flex;
+  align-items: center;
+}
+
+.formppk-question-box input[type="checkbox"] {
+  margin-right: 0.5rem;
+}
+
+/* กล่องแสดงผลแนะนำ */
+.formppk-referral-box {
+  background: #ffffff;
+  border: 2px dashed #cbd5e1;
+  border-radius: 6px;
+  padding: 1.25rem 1.5rem;
+  margin-top: 2rem;
+}
+
+.formppk-referral-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.formppk-referral-icon-success {
+  width: 20px;
+  height: 20px;
+  color: #16a34a;
+}
+
+.formppk-referral-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.formppk-referral-item {
+  display: flex;
+  align-items: center;
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.formppk-referral-icon-hospital {
+  width: 18px;
+  height: 18px;
+  color: #2563eb;
+  margin-right: 0.4rem;
+}
+
+.formppk-referral-item-label {
+  font-weight: 600;
+  margin-right: 0.25rem;
+  color: #1f2937;
+}
+
+.formppk-referral-item-value {
+  color: #111827;
+}
+
+/* ปุ่มยืนยัน */
+.formppk-referral-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 1rem;
+}
+
+.formppk-btn-confirm {
+  background-color: #2563eb;
+  color: white;
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.6rem 1.6rem;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.formppk-btn-confirm:hover {
+  background-color: #1d4ed8;
+  transform: translateY(-1px);
+}
+
+/* Responsive: มือถือ / Tablet */
+@media (max-width: 900px) {
+  .formppk-wrapper {
+    padding: 1.5rem 1rem;
+    margin: 1rem;
+  }
+
+  .formppk-title {
+    font-size: 1.6rem;
+  }
+
+  .formppk-questions-container {
+    grid-template-columns: 1fr;
+  }
+
+  .formppk-question-select-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .formppk-btn-clear {
+    width: 100%;
+    justify-content: center;
+  }
+}
+

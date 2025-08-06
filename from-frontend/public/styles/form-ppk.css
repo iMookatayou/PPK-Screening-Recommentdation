@@ -1,0 +1,261 @@
+@font-face {
+  font-family: 'Sarabun';
+  src: url('/fonts/Sarabun-Regular.woff2') format('truetype');
+}
+
+.form-ppk {
+  font-family: 'Sarabun', sans-serif;
+  font-size: 14px;
+  color: #000;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* กล่องรวมแต่ละหมวด */
+.form-tight {
+  border: 1px solid #999;
+  padding: 16px 24px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: #fff;
+}
+
+.form-tight legend {
+  font-weight: bold;
+  font-size: 16px;
+  padding: 0 10px;
+}
+
+/* ส่วนหัว: ซ้าย + รูป */
+.form-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 32px;
+  flex-wrap: nowrap;
+}
+
+.form-left {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 180px);
+  overflow: hidden;
+}
+
+.form-photo-wrapper {
+  display: flex;
+  justify-content: flex-start;
+  align-items: flex-start;
+  width: 140px;
+  margin-left: 24px;
+}
+
+.form-photo {
+  width: 120px;
+  border: 1px solid #aaa;
+  padding: 4px;
+  background: #fff;
+  text-align: center;
+  font-size: 12px;
+}
+
+.form-photo img {
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+/* แถวข้อมูลแต่ละบรรทัด */
+.tight-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  margin-bottom: 8px;
+  gap: 8px;
+}
+
+.tight-row label {
+  white-space: nowrap;
+  font-weight: normal;
+  font-size: 14px;
+  margin-right: 4px;
+}
+
+/* input ขีดเส้นใต้ */
+.tight-row input {
+  flex: 1 1 150px;         /* Default ให้มี min ความกว้าง */
+  border: none;
+  border-bottom: 1px dotted #444;
+  background: transparent;
+  font-size: 14px;
+  padding: 2px 4px;
+  outline: none;
+  min-width: 80px;         /* Default min */
+  max-width: 100%;         /* ยืดได้ตาม container */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tight-row input:focus {
+  border-bottom: 1px solid #000;
+}
+
+.tight-row input[readonly] {
+  background-color: #f8f8f8;
+  color: #444;
+}
+
+/* ปรับขนาดตาม class เฉพาะ */
+.tight-row input.full {
+  flex: 1 1 100%;
+  max-width: 100%;
+}
+.tight-row input.long {
+  width: 260px;
+  flex: 0 0 auto;
+}
+.tight-row input.medium {
+  width: 180px;
+  flex: 0 0 auto;
+}
+.tight-row input.short {
+  width: 120px;
+  flex: 0 0 auto;
+}
+.tight-row input.xshort {
+  width: 60px;
+  flex: 0 0 auto;
+}
+
+/* ✅ เพศ radio แนวเดียวกัน */
+.tight-radio-inline {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: nowrap;
+}
+
+.tight-radio-inline label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  white-space: nowrap;
+  font-size: 14px;
+}
+
+.tight-radio-inline input[type="radio"] {
+  transform: scale(0.9);
+  margin: 0;
+}
+
+/* layout address */
+.address-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.address-row .tight-row {
+  margin-bottom: 4px;
+}
+
+/* layout ซ้าย-ขวา */
+.form-bottom-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  margin-top: 12px;
+  flex-wrap: wrap; 
+}
+
+.form-half {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 250px;
+}
+
+.form-half:first-child {
+  border-right: 1px dashed #bbb;
+  padding-right: 24px;
+}
+
+.form-half:last-child {
+  padding-left: 24px;
+}
+
+/* เส้นแบ่งหมวด */
+.section-divider {
+  border: none;
+  border-top: 2px dashed #999;
+  margin: 24px 0;
+}
+
+.section-title {
+  font-weight: bold;
+  font-size: 15px;
+  margin: 12px 0 6px;
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 2px;
+}
+
+/* responsive ปรับ input ให้เต็มแถวเมื่อจอเล็ก */
+@media (max-width: 768px) {
+  .form-header {
+    flex-direction: column;
+  }
+  .form-photo-wrapper {
+    margin-left: 0;
+    margin-top: 16px;
+  }
+  .tight-row input {
+    flex: 1 1 100%;
+    max-width: 100%;
+  }
+  .form-bottom-row {
+    flex-direction: column;
+  }
+  .form-half:first-child {
+    border-right: none;
+    padding-right: 0;
+    border-bottom: 1px dashed #bbb;
+    margin-bottom: 16px;
+  }
+  .form-half:last-child {
+    padding-left: 0;
+  }
+}
+
+/* สำหรับพิมพ์ */
+@media print {
+  body {
+    -webkit-print-color-adjust: exact;
+  }
+  .form-ppk {
+    width: 100%;
+    font-size: 13px;
+  }
+  .form-tight {
+    border: 1px solid #000;
+    padding: 12px 16px;
+  }
+  .form-photo img {
+    border: 1px solid #000;
+  }
+  .tight-row input {
+    border-bottom: 1px dotted #000;
+  }
+}
+
+/* เว้นบรรทัดให้หน่วยบริการต้น/รองเท่ากัน */
+.tight-row.unit-field {
+  margin-bottom: 12px;
+}
+
+/* ปรับ input วันที่ให้สั้นลง */
+.tight-row input[type="date"],
+.tight-row input.date-field {
+  width: 160px;    /* กำหนดความกว้างคงที่ */
+  flex: 0 0 160px; /* ไม่ให้ยืดออกไปตาม container */
+}

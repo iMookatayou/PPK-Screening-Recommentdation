@@ -1,0 +1,44 @@
+# ========================
+# FROM-FRONTEND (Next.js)
+# ========================
+/from-frontend/node_modules
+/from-frontend/.pnp
+/from-frontend/.pnp.*
+/from-frontend/.next
+/from-frontend/out
+/from-frontend/.vercel
+/from-frontend/.DS_Store
+/from-frontend/npm-debug.log*
+/from-frontend/yarn-debug.log*
+/from-frontend/yarn-error.log*
+/from-frontend/.pnpm-debug.log*
+/from-frontend/coverage
+/from-frontend/build
+/from-frontend/*.tsbuildinfo
+/from-frontend/next-env.d.ts
+/from-frontend/.env*
+/from-frontend/.idea
+/from-frontend/.vscode
+
+# ==========================
+# FROM-BACKEND-FIX2 (Laravel)
+# ==========================
+/from-backend-fix2/vendor
+/from-backend-fix2/node_modules
+/from-backend-fix2/storage/*.key
+/from-backend-fix2/storage/logs
+/from-backend-fix2/storage/framework
+/from-backend-fix2/storage/app/public
+/from-backend-fix2/public/storage
+/from-backend-fix2/public/hot
+/from-backend-fix2/public/mix-manifest.json
+/from-backend-fix2/public/build
+/from-backend-fix2/.env
+/from-backend-fix2/.env.*
+/from-backend-fix2/.phpunit.result.cache
+/from-backend-fix2/.phpunit.cache
+/from-backend-fix2/.DS_Store
+/from-backend-fix2/.idea
+/from-backend-fix2/.vscode
+/from-backend-fix2/bootstrap/cache
+/from-backend-fix2/*.log

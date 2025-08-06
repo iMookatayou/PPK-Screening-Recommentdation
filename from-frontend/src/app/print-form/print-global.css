@@ -1,0 +1,140 @@
+/* General Styling */
+.print-area {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  font-family: 'Sarabun', sans-serif;
+  font-size: 14px;
+  color: black;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.logo {
+  max-width: 80px;
+  height: auto;
+}
+
+.title {
+  font-size: 1.5rem;
+  font-weight: bold;
+  margin: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.patient-info {
+  margin-bottom: 1rem;
+}
+
+.patient-info p {
+  margin: 0.25rem 0;
+  font-size: 14px;
+}
+
+/* Table */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 0.5rem;
+  margin-bottom: 1.5rem;
+}
+
+th, td {
+  border: 1.5px solid #004d00;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+}
+
+th {
+  background-color: #eaffea;
+  font-weight: bold;
+  font-size: 14px;
+}
+
+/* Divider */
+.divider {
+  border-top: 3px solid #004d00;
+  margin: 1rem 0;
+}
+
+/* Signature */
+.signature {
+  margin-top: 2rem;
+}
+
+.signature p {
+  margin-bottom: 1rem;
+  font-size: 14px;
+}
+
+.hospital-name {
+  font-size: 16px;
+  font-weight: 600;
+  text-align: left;
+  color: #004d00;
+  margin-bottom: 0.25rem;
+}
+
+.patient-info-inline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem;
+  font-size: 14px;
+  margin-bottom: 1rem;
+}
+
+.patient-info-inline span {
+  white-space: nowrap;
+}
+
+/* Print Specific */
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 15mm;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    box-sizing: border-box;
+  }
+
+  html, body {
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    background: white !important;
+    font-size: 13.5px;
+  }
+
+  .print-area {
+    max-width: 100%;
+    padding: 0;
+    margin: 0 auto;
+  }
+
+  .logo {
+    max-width: 70px;
+  }
+
+  .title {
+    font-size: 1.4rem;
+  }
+
+  th, td {
+    font-size: 13px;
+    padding: 0.5rem;
+  }
+
+  .signature p {
+    font-size: 13px;
+  }
+}
