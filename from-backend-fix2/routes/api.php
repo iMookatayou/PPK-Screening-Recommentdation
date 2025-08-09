@@ -1,53 +1,61 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Http\Request;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FormPPKController;
 use App\Http\Controllers\ReferralGuidanceController;
+use App\Http\Controllers\DiseaseController;
+use App\Http\Controllers\AdminUserController;
+use App\Http\Controllers\SummaryController;
 
 /*
 |--------------------------------------------------------------------------
-| Public Routes
+| Public Routes (ไม่ต้องมี token)
 |--------------------------------------------------------------------------
 */
-Route::post('/register', [AuthController::class, 'register']);
+Route::post('/register', [AuthController::class, 'register'])
+    ->middleware('throttle:5,1');
 
-Route::post('/login-token', [AuthController::class, 'login']);
+Route::post('/login-token', [AuthController::class, 'login'])
+    ->middleware('throttle:5,1');
 
 /*
 |--------------------------------------------------------------------------
-| /me - ใช้ manual token auth
+| Protected Routes (ต้องมี Bearer token และไม่หมดอายุ)
 |--------------------------------------------------------------------------
 */
-Route::middleware('manualTokenAuth')->get('/me', function (Request $request) {
-    return response()->json($request->user());
-});
+Route::middleware(['manualTokenAuth', 'token.expiration'])->group(function () {
 
-/*
-|--------------------------------------------------------------------------
-| Protected Routes (ใช้ manualTokenAuth)
-|--------------------------------------------------------------------------
-*/
-Route::middleware(['manualTokenAuth'])->group(function () {
-
-    // User
+    // ---------- Auth ----------
+    Route::get('/me', [AuthController::class, 'me']);
     Route::put('/user', [AuthController::class, 'update']);
-
     Route::post('/logout-token', [AuthController::class, 'logout']);
 
-    // Referral Guidance
+    // ---------- Referral Guidance ----------
     Route::post('/referral-guidances', [ReferralGuidanceController::class, 'store']);
     Route::get('/referral-guidances/summary', [ReferralGuidanceController::class, 'summary']);
 
-    // Form PPK
+    // ---------- Form PPK ----------
     Route::get('/form-ppk', [FormPPKController::class, 'index']);
     Route::post('/form-ppk', [FormPPKController::class, 'store']);
+    Route::get('/form-ppk/summary', [FormPPKController::class, 'summary']); // ไว้ก่อน {case_id}
     Route::get('/form-ppk/{case_id}', [FormPPKController::class, 'show']);
     Route::put('/form-ppk/{case_id}', [FormPPKController::class, 'update']);
     Route::delete('/form-ppk/{case_id}', [FormPPKController::class, 'destroy']);
 
-    // Admin Only
-    Route::get('/admin-only', fn () => ['ok' => true])
-        ->middleware('role:admin');
+    // ---------- Disease ----------
+    Route::get('/diseases', [DiseaseController::class, 'index']);
+
+    // ---------- Summary (ยอดรวมทั่วระบบ) ----------
+    Route::get('/summary', [SummaryController::class, 'index']); // ?type, start_date, end_date
+
+    // ---------- Admin Only ----------
+    // ---------- Admin Only ----------
+    Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::get('/users/pending', [AdminUserController::class, 'getPendingUsers']);
+        Route::put('/users/{id}/approve', [AdminUserController::class, 'approveUser']); // ✅ แก้ตรงนี้
+        Route::put('/users/{id}/reject', [AdminUserController::class, 'rejectUser']);
+        Route::get('/users/all', [AdminUserController::class, 'getAllUsers']);
+    });
+
 });

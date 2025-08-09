@@ -70,7 +70,11 @@ class ReferralGuidanceController extends Controller
     }
 
     /**
-     * SUMMARY – แสดงข้อมูลสรุปสถิติคำแนะนำห้องตรวจ
+     * SUMMARY – แสดงข้อมูลสรุปสถิติคำแนะนำห้องตรวจ พร้อมรองรับการกรองช่วงเวลาและ type
+     * Query Params:
+     *  - type: (optional) 'referral' หรืออื่น ๆ
+     *  - start_date: (optional) 'YYYY-MM-DD'
+     *  - end_date: (optional) 'YYYY-MM-DD'
      */
     public function summary(Request $request)
     {
@@ -80,16 +84,33 @@ class ReferralGuidanceController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
+        $type = $request->query('type'); // null หรือ 'referral'
+        $startDate = $request->query('start_date');
+        $endDate = $request->query('end_date');
+
         try {
-            $summary = ReferralGuidance::select(
+            $query = ReferralGuidance::select(
                     'question',
                     'question_code',
                     'question_title'
                 )
                 ->selectRaw('COUNT(*) as total')
                 ->groupBy('question', 'question_code', 'question_title')
-                ->orderBy('total', 'desc')
-                ->get();
+                ->orderBy('total', 'desc');
+
+            if ($type) {
+                $query->where('type', $type);
+            }
+
+            if ($startDate) {
+                $query->whereDate('created_at', '>=', $startDate);
+            }
+
+            if ($endDate) {
+                $query->whereDate('created_at', '<=', $endDate);
+            }
+
+            $summary = $query->get();
 
             return response()->json([
                 'message' => 'ดึงข้อมูลสรุปสำเร็จ',

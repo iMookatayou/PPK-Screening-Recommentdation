@@ -24,6 +24,8 @@ return Application::configure(basePath: dirname(__DIR__))
          */
         $middleware->alias([
             'manualTokenAuth' => \App\Http\Middleware\ManualTokenAuth::class,
+            'token.expiration' => \App\Http\Middleware\TokenExpirationCheck::class,
+            'role' => \App\Http\Middleware\RoleMiddleware::class,
         ]);
 
         /**

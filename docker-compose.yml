@@ -1,0 +1,60 @@
+version: '3.8'
+services:
+  backend:
+    build:
+      context: ./from-backend-fix2
+      dockerfile: Dockerfile
+    container_name: backend
+    ports:
+      - "9000:9000"
+    volumes:
+      - ./from-backend-fix2:/app
+    env_file:
+      - ./from-backend-fix2/.env
+    environment:
+      - BASEURL=${BACKEND_BASEURL}
+    depends_on:
+      - db
+    networks:
+      - app-network
+
+  frontend:
+    build:
+      context: ./from-frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./from-frontend:/app
+    env_file:
+      - ./from-frontend/.env
+    environment:
+      - BASEURL=${FRONTEND_BASEURL}
+    depends_on:
+      - backend
+    networks:
+      - app-network
+
+  db:
+    image: mysql:8.0
+    container_name: db
+    restart: always
+    environment:
+      MYSQL_DATABASE: laravel
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_USER: fenyb1
+      MYSQL_PASSWORD: 0959611859fenyb1
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - app-network
+
+volumes:
+  db_data:
+
+networks:
+  app-network:
+    driver: bridge
