@@ -1,163 +1,167 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { motion } from 'framer-motion'
 import Select from 'react-select'
-import {
-  CheckCircle,
-  Hospital,
-  ClipboardList,
-  Search,
-  XCircle,
-  AlertCircle,
-} from 'lucide-react'
+import { CheckCircle, Hospital, ClipboardList, Search, AlertCircle } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 
 import { clinicLabelMap } from '@/app/components/questionpath/clinicLabelMap'
 import allQuestionsRaw from '@/app/components/questionpath/allQuestions'
 import { getTitle } from '@/app/components/utils/getTitle'
+
 import styles from './styles/Erdsppk.module.css'
 import { useToast } from '@/app/components/ui/ToastProvider'
+import { authAxios } from '@/lib/axios'
+
+// ---------- Types เฉพาะงาน "แนะนำห้องตรวจ" ----------
+type IncomingResult = {
+  clinic?: string | string[] | null
+  symptoms?: string[] | string
+  note?: string
+  is_refer_case?: boolean
+  answers?: Record<string, any>
+}
+
+type GuideResult = {
+  clinic: string[]            // แนะนำได้หลายห้อง → array เสมอ
+  symptoms: string[]          // อาการให้เป็น array เสมอ
+  note: string
+  is_refer_case: boolean
+  answers: Record<string, any>
+  type: 'guide'
+}
+
+// บังคับรูปให้สะอาด (string|string[] → string[])
+function normalizeGuideResult(r: IncomingResult): GuideResult {
+  const clinic = Array.isArray(r.clinic)
+    ? r.clinic.filter(Boolean).map(String)
+    : r.clinic != null
+    ? [String(r.clinic)]
+    : []
+
+  const symptoms = Array.isArray(r.symptoms)
+    ? r.symptoms.filter(Boolean).map(String)
+    : r.symptoms != null
+    ? [String(r.symptoms)]
+    : []
+
+  return {
+    clinic,
+    symptoms,
+    note: r.note ?? '',
+    is_refer_case: !!r.is_refer_case,
+    answers: r.answers ?? {},
+    type: 'guide',
+  }
+}
 
 export default function ReferralSystem() {
   const Questions = allQuestionsRaw as Record<
     string,
-    React.ComponentType<{ onResult: (result: any) => void; type?: string }>
+    React.ComponentType<{ onResult: (result: IncomingResult) => void; type?: string }>
   >
 
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([])
-  const [questionResults, setQuestionResults] = useState<Record<string, any>>({})
+  const [questionResults, setQuestionResults] = useState<Record<string, GuideResult>>({})
   const [saving, setSaving] = useState(false)
   const { addToast } = useToast()
 
-  const questionOptions = Object.keys(Questions).map((key, i) => ({
-    value: key,
-    label: `ข้อที่ ${i + 1}: ${getTitle(i + 1)}`,
-  }))
+  const questionOptions = useMemo(
+    () =>
+      Object.keys(Questions).map((key, i) => ({
+        value: key,
+        label: `ข้อที่ ${i + 1}: ${getTitle(i + 1)}`,
+      })),
+    [Questions]
+  )
 
   const getTitleFromKey = (key: string): string => {
     const match = key.match(/\d+/)
-    return match ? getTitle(parseInt(match[0])) : ''
+    return match ? getTitle(parseInt(match[0], 10)) : ''
   }
 
   const handleSave = async () => {
-  if (saving) return;
-  setSaving(true);
+    if (saving) return
 
-  try {
-    // STEP 1: ตรวจสอบ Base URL
-    const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-    if (!baseUrl) throw new Error('NEXT_PUBLIC_API_BASE_URL ไม่ถูกตั้งค่าใน .env');
-
-    // STEP 2: ตรวจสอบ token
-    const token = localStorage.getItem('token')?.trim();
-    if (!token) throw new Error('กรุณาเข้าสู่ระบบก่อนบันทึกข้อมูล');
-
-    // STEP 3: ดึงข้อมูลผู้ใช้จาก /api/me
-    const meRes = await fetch(`${baseUrl}/api/me`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-    });
-
-    if (!meRes.ok) {
-      const error = await meRes.json().catch(() => ({}));
-      throw new Error(error.message || 'ไม่สามารถดึงข้อมูลผู้ใช้งาน');
+    // ✅ validate เฉพาะสิ่งที่ต้องใช้จริง
+    if (selectedQuestions.length === 0) {
+      addToast({
+        type: 'error',
+        icon: <AlertCircle size={20} />,
+        message: 'กรุณาเลือกหัวข้อคำถามอย่างน้อย 1 ข้อ',
+        position: 'top-right',
+      })
+      return
     }
 
-    const me = await meRes.json();
-    const routedBy = me.display_name || me.username || me.name || 'anonymous';
+    const answeredCount = Object.keys(questionResults).length
+    if (answeredCount === 0) {
+      addToast({
+        type: 'error',
+        icon: <AlertCircle size={20} />,
+        message: 'ยังไม่มีข้อมูลคำถามให้บันทึก',
+        position: 'top-right',
+      })
+      return
+    }
 
-    // STEP 4: เตรียมข้อมูลสำหรับบันทึก
-    const patientId = 'anonymous-' + uuidv4();
-    const now = new Date().toISOString();
+    setSaving(true)
+    try {
+      // ใครเป็นผู้บันทึก (ดึงจาก /me)
+      const meRes = await authAxios.get('/me')
+      const me = meRes.data || {}
+      const routedBy: string = me.display_name || me.username || me.name || 'anonymous'
 
-    const resultsToSave = Object.entries(questionResults).map(([key, result], index) => {
-      const safeSymptoms = Array.isArray(result?.symptoms)
-        ? result.symptoms
-        : result?.symptoms !== undefined
-        ? [String(result.symptoms)]
-        : [];
+      const now = new Date().toISOString()
+      const patientId = 'anonymous-' + uuidv4() // ระบบนี้ไม่ได้ผูกกับบัตร → ใส่ anonymous
 
-      const safeClinic = Array.isArray(result?.clinic)
-        ? result.clinic
-        : result?.clinic
-        ? [result.clinic]
-        : [];
-
-      return {
+      // แปลงผลคำถามเป็น shape สำหรับบันทึก
+      const resultsToSave = Object.entries(questionResults).map(([key, result], index) => ({
         question: key,
         question_code: index + 1,
         question_title: getTitleFromKey(key),
-        clinic: safeClinic,
-        symptoms: safeSymptoms,
-        note: result?.note || '',
-        is_refer_case: result?.is_refer_case ?? false,
+        clinic: result.clinic,        // array เสมอ
+        symptoms: result.symptoms,    // array เสมอ
+        note: result.note || '',
+        is_refer_case: result.is_refer_case ?? false,
         type: 'guide',
         routed_by: routedBy,
         created_at: now,
-      };
-    });
+        answers: result.answers ?? {},
+      }))
 
-    if (resultsToSave.length === 0) {
-      throw new Error('ยังไม่มีข้อมูลคำถามให้บันทึก');
+      const summaryClinics = [...new Set(resultsToSave.flatMap((r) => r.clinic))]
+      const summarySymptoms = [...new Set(resultsToSave.flatMap((r) => r.symptoms))]
+
+      const payload = {
+        patient_id: patientId,
+        selected_questions: selectedQuestions,
+        question_results: resultsToSave,
+        summary_clinics: summaryClinics,
+        summary_symptoms: summarySymptoms,
+      }
+
+      await authAxios.post('/referral-guidances', payload)
+
+      addToast({
+        type: 'success',
+        icon: <CheckCircle size={20} />,
+        message: 'บันทึกคำแนะนำสำเร็จ',
+        position: 'top-right',
+      })
+    } catch (err: unknown) {
+      const error = err as Error
+      addToast({
+        type: 'error',
+        icon: <AlertCircle size={20} />,
+        message: error?.message || 'เกิดข้อผิดพลาด',
+        position: 'top-right',
+      })
+    } finally {
+      setSaving(false)
     }
-
-    const summaryClinics = [...new Set(resultsToSave.flatMap((r) => r.clinic || []))];
-    const summarySymptoms =
-      resultsToSave.length > 0
-        ? [...new Set(resultsToSave.flatMap((r) => r.symptoms ?? []))]
-        : [];
-
-    // STEP 5: สร้าง payload
-    const payload = {
-      patient_id: patientId,
-      selected_questions: selectedQuestions,
-      question_results: resultsToSave,
-      summary_clinics: summaryClinics,
-      summary_symptoms: summarySymptoms,
-    };
-
-    console.log('[📦 ส่งข้อมูลไป backend]:', payload);
-
-    // STEP 6: ส่งไป API
-    const saveRes = await fetch(`${baseUrl}/api/referral-guidances`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!saveRes.ok) {
-      const errorDetails = await saveRes.json().catch(() => null);
-      console.error('[❌ API ERROR]', errorDetails);
-      throw new Error(errorDetails?.message || 'ไม่สามารถบันทึกข้อมูลได้');
-    }
-
-    addToast({
-      type: 'success',
-      icon: <CheckCircle size={20} />,
-      message: 'บันทึกคำแนะนำสำเร็จ',
-      position: 'top-right',
-    });
-
-  } catch (err: unknown) {
-    const error = err as Error;
-    console.error('[❌ เกิดข้อผิดพลาด]', error.message);
-    addToast({
-      type: 'error',
-      icon: <AlertCircle size={20} />,
-      message: error.message || 'เกิดข้อผิดพลาดขณะบันทึกข้อมูล',
-      position: 'top-right',
-    });
-  } finally {
-    setSaving(false);
   }
-};
 
   return (
     <div style={{ position: 'relative' }}>
@@ -198,6 +202,7 @@ export default function ReferralSystem() {
                 onChange={(selected) => {
                   const values = Array.isArray(selected) ? selected.map((s) => s.value) : []
                   setSelectedQuestions(values)
+                  // ล้างผลคำถามที่ถูกเอาออก
                   setQuestionResults((prev) =>
                     Object.fromEntries(Object.entries(prev).filter(([k]) => values.includes(k)))
                   )
@@ -223,17 +228,23 @@ export default function ReferralSystem() {
                   <div className={styles['question-title']}>{getTitleFromKey(key)}</div>
                   <div className={styles['question-body']}>
                     <QuestionComponent
-                      type="guide" 
-                      onResult={(res) =>
-                        setQuestionResults((prev) => ({
-                          ...prev,
-                          [key]: {
-                            ...res,
-                            type: 'guide', 
-                          },
-                        }))
-                      }
-                    />
+                        type="guide"
+                        onResult={(res: IncomingResult | null) => {
+                          if (!res) {
+                            // ถ้า res เป็น null → ลบออกจากผล
+                            setQuestionResults((prev) => {
+                              const { [key]: _, ...rest } = prev
+                              return rest
+                            })
+                          } else {
+                            // ถ้า res มีค่า → normalize ตามปกติ
+                            setQuestionResults((prev) => ({
+                              ...prev,
+                              [key]: normalizeGuideResult(res),
+                            }))
+                          }
+                        }}
+                      />
                   </div>
                 </motion.div>
               )
@@ -259,23 +270,22 @@ export default function ReferralSystem() {
               </motion.div>
               ระบบแนะนำให้ส่งต่อไปยังห้องตรวจต่อไปนี้
             </div>
-              <ul className={styles['referral-list']}>
-                {Object.entries(questionResults).map(([key, result]) => (
-                  <li key={key} className={styles['referral-item']}>
-                    <Hospital className={styles['referral-icon-hospital']} />
-                    <span className={styles['referral-item-label']}>{getTitleFromKey(key)}:</span>
-                    <span className={styles['referral-item-value']}>
-                      {clinicLabelMap[result?.clinic ?? ''] ?? result?.clinic ?? 'ไม่ระบุ'}
-                    </span>
-                  </li>
-                ))}
-              </ul>
+            <ul className={styles['referral-list']}>
+              {Object.entries(questionResults).map(([key, result]) => (
+                <li key={key} className={styles['referral-item']}>
+                  <Hospital className={styles['referral-icon-hospital']} />
+                  <span className={styles['referral-item-label']}>{getTitleFromKey(key)}:</span>
+                   <span className={styles['referral-item-value']}>
+                    {Array.isArray(result.clinic) && result.clinic.length > 0
+                      ? result.clinic.map((c) => clinicLabelMap[c] ?? c).join(', ')
+                      : 'ไม่ระบุ'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+
             <div className="text-center mt-4">
-              <button
-                className={styles['btn-confirm']}
-                onClick={handleSave}
-                disabled={saving}
-              >
+              <button className={styles['btn-confirm']} onClick={handleSave} disabled={saving}>
                 {saving ? 'กำลังบันทึก...' : 'ยืนยันผลการแนะนำ'}
               </button>
             </div>

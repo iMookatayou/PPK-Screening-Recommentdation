@@ -32,9 +32,16 @@
 }
 
 /* แถว Select + ปุ่มล้าง */
+.actions-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
 .referral-question-select-box {
   flex: 1;
-  margin-bottom: 3rem; /* ✅ ปรับระยะห่างจากกล่องคำถามให้ชัดเจนขึ้น */
+  margin-bottom: 3rem;
 }
 
 .referral-question-label {
@@ -72,7 +79,6 @@
   transition: all 0.2s ease;
   box-shadow: 0 2px 6px rgba(225, 29, 72, 0.3);
 }
-
 .referral-btn-clear:hover {
   background-color: #be123c;
   transform: translateY(-1px);
@@ -83,11 +89,12 @@
   height: 18px;
 }
 
+/* กล่องคำถาม */
 .questions-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
   gap: 1.5rem;
-  margin-top: 1.5rem;  
+  margin-top: 1.5rem;
 }
 
 .question-box {
@@ -98,7 +105,6 @@
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
   transition: background 0.3s ease;
 }
-
 .question-box:hover {
   background: #f3f4f6;
 }
@@ -188,16 +194,111 @@
   transform: translateY(-1px);
 }
 
-/* Responsive */
-@media (max-width: 768px) {
+/* ------------ Responsive: มือถือ ≤480px ------------ */
+@media (max-width: 480px) {
   .referral-wrapper {
-    padding: 1.2rem 1rem;
-    margin: 1rem;
+    padding: 1rem 0.75rem;
+    margin: 0.5rem;
   }
+
   .referral-title-main {
-    font-size: 1.5rem;
+    font-size: 1.3rem;
+    flex-direction: column;
+    gap: 0.25rem;
+    text-align: center;
   }
+
   .questions-container {
     grid-template-columns: 1fr;
+  }
+
+  .referral-question-select-box {
+    margin-bottom: 2rem;
+  }
+
+  .actions-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .referral-btn-clear {
+    width: 100%;
+    justify-content: center;
+    font-size: 0.85rem;
+    padding: 0.5rem 1rem;
+  }
+
+  .btn-confirm {
+    width: 100%;
+    font-size: 0.9rem;
+  }
+
+  .question-box {
+    padding: 0.75rem 1rem;
+  }
+
+  .referral-box {
+    padding: 1rem;
+  }
+
+  .referral-title {
+    font-size: 0.95rem;
+  }
+
+  .referral-item {
+    font-size: 0.9rem;
+  }
+}
+
+/* ------------ Responsive: iPad 769–1024px ------------ */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .referral-wrapper {
+    padding: 1.75rem 2rem;
+  }
+
+  .referral-title-main {
+    font-size: 1.8rem;
+  }
+
+  .referral-btn-clear {
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
+  }
+
+  .btn-confirm {
+    font-size: 0.95rem;
+    padding: 0.55rem 1.4rem;
+  }
+
+  .questions-container {
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  }
+
+  .referral-question-select-box {
+    margin-bottom: 2.5rem;
+  }
+}
+
+/* ------------ Responsive: Desktop ≥1440px ------------ */
+@media (min-width: 1440px) {
+  .referral-wrapper {
+    max-width: 1080px;
+    padding: 2.5rem 3rem;
+  }
+
+  .referral-title-main {
+    font-size: 2.2rem;
+  }
+
+  .referral-subtitle {
+    font-size: 1.1rem;
+  }
+
+  .referral-box {
+    padding: 1.5rem 2rem;
+  }
+
+  .referral-item {
+    font-size: 1rem;
   }
 }

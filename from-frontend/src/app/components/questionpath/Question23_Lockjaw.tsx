@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { getThaiDayName } from '@/lib/dateUtils'
 
 export interface Question22Result {
   question: string
@@ -11,51 +10,57 @@ export interface Question22Result {
   note: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
 }
 
 interface Props {
-  onResult: (result: Question22Result) => void
+  onResult: (result: Question22Result | null) => void
+  type: string
 }
 
-export default function Question22_PEP({ onResult }: Props) {
+export default function Question22_PEP({ onResult, type }: Props) {
   const [note, setNote] = useState('')
   const [isAfterHours, setIsAfterHours] = useState(false)
-  const hasSentRef = useRef(false)
+  const prevKey = useRef('')
 
-  const emitResult = () => {
+  useEffect(() => {
+    const symptoms = ['occupational_pep']
     const noteParts: string[] = []
 
     if (isAfterHours) {
       noteParts.push('กรณีนอกเวลาราชการ')
     }
-
     if (note.trim()) {
       noteParts.push(note.trim())
     }
 
-    const finalNote = noteParts.join(' | ') // จะเป็น '' ถ้าไม่มีอะไรเลย
+    const finalNote = noteParts.join(' | ')
+    const clinic = isAfterHours ? ['er'] : ['occmed']
 
-    onResult({
-      question: 'OccupationalPEP',
-      question_code: 22,
-      question_title: 'PEP สำหรับเจ้าหน้าที่ (Occupational PEP)',
-      clinic: isAfterHours ? ['er'] : ['occmed'],
-      note: finalNote,
-      symptoms: ['occupational_pep'],
-      isReferCase: true,
-    })
-  }
+    // กันการยิงซ้ำ
+    const key = JSON.stringify({ clinic, finalNote, symptoms })
+    if (prevKey.current !== key) {
+      prevKey.current = key
 
-  useEffect(() => {
-    if (!hasSentRef.current) {
-      emitResult()
-      hasSentRef.current = true
+      if (!finalNote.trim()) {
+        onResult(null)
+        return
+      }
+
+      onResult({
+        question: 'OccupationalPEP',
+        question_code: 22,
+        question_title: 'PEP สำหรับเจ้าหน้าที่ (Occupational PEP)',
+        clinic,
+        note: finalNote,
+        symptoms,
+        isReferCase: true,
+        routedBy: 'auto',
+        type
+      })
     }
-  }, [])
-
-  useEffect(() => {
-    emitResult()
-  }, [note, isAfterHours])
+  }, [note, isAfterHours, type, onResult])
 
   return (
     <div className="flex flex-col gap-2 text-sm">
@@ -81,9 +86,10 @@ export default function Question22_PEP({ onResult }: Props) {
       </label>
       <textarea
         id="note"
+        title="หมายเหตุเพิ่มเติม"
         className="w-full border border-gray-300 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
         rows={2}
-        placeholder="บันทึกรายละเอียดเพิ่มเติม "
+        placeholder="บันทึกรายละเอียดเพิ่มเติม"
         value={note}
         onChange={(e) => setNote(e.target.value)}
       />

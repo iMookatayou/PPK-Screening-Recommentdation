@@ -1,26 +1,134 @@
-  'use client'
+'use client'
 
-  import React, { useState, useEffect, useRef } from 'react'
-  import Select from 'react-select'
-  import { useRouter } from 'next/navigation'
-  import { useThaiID } from '@/app/ClientLayout'
-  import { getTitle } from '@/app/components/utils/getTitle'
-  import allQuestionsRaw from '@/app/components/questionpath/allQuestions'
-  import { checkRouting } from '@/app/components/utils/routingRules'
-  import { clinicLabelMap } from '@/app/components/questionpath/clinicLabelMap'
-  import { CheckCircle, Hospital, AlertCircle, Trash2 } from '@/icons'
-  import { motion } from 'framer-motion'
-  import styles from './styles/Formppk.module.css'
-  import '../../../public/styles/form-ppk.css'
-  import { useToast } from '@/app/components/ui/ToastProvider'
-  import { v4 as uuidv4 } from 'uuid'
-  import type { PatientData } from '@/app/types/globalType'
+import React, { useState, useEffect, useRef } from 'react'
+import Select from 'react-select'
+import { useRouter } from 'next/navigation'
+import { useThaiID } from '@/app/ClientLayout'
+import { getTitle } from '@/app/components/utils/getTitle'
+import allQuestionsRaw from '@/app/components/questionpath/allQuestions'
+import { checkRouting } from '@/app/components/utils/routingRules'
+import { clinicLabelMap } from '@/app/components/questionpath/clinicLabelMap'
+import { CheckCircle, Hospital, AlertCircle, Trash2 } from '@/icons'
+import { motion } from 'framer-motion'
+import styles from './styles/Formppk.module.css'
+import '../../../public/styles/form-ppk.css'
+import { useToast } from '@/app/components/ui/ToastProvider'
+import { v4 as uuidv4 } from 'uuid'
+import type {
+  PatientData,
+  FormDraft,
+  QuestionResult,
+  QuestionResultWithMeta,
+  FormPPKPayload
+} from '@/app/types/globalType'
 
-  export default function FormContent() {
-    const { data: thaiIDData, resetData } = useThaiID() // ใช้ resetData เพื่อล้างข้อมูลจาก context
-    const router = useRouter() // ใช้ router เพื่อรีเฟรชหน้า
+import { useAuth } from '@/app/context/AuthContext'
+import { authAxios } from '@/lib/axios'
 
-    const [manualData, setManualData] = useState<PatientData>({
+export default function FormContent() {
+  const { data: thaiIDData, resetData } = useThaiID() // ใช้ resetData เพื่อล้างข้อมูลจาก context
+  const router = useRouter() // ใช้ router เพื่อรีเฟรชหน้า
+
+  const [manualData, setManualData] = useState<PatientData>({
+    cid: '',
+    titleNameTh: '',
+    firstNameTh: '',
+    lastNameTh: '',
+    birthDate: '',
+    gender: '', 
+    address: {
+      Full: '',
+      HouseNo: '',
+      Tumbol: '',
+      Amphur: '',
+      Province: '',
+      Moo: '',
+    },
+    issueDate: '',
+    expiryDate: '',
+    maininscl_name: '',
+    hmain_name: '',
+    hsub_name: '',
+    primary_province_name: '',
+    primary_amphur_name: '',
+    primary_tumbon_name: '',
+    primary_mooban_name: '',
+    photo: '',
+  })
+
+  const Questions = allQuestionsRaw as Record<
+    string,
+    React.ComponentType<{ onResult: (result: any) => void; type?: string }>
+  >
+
+  const normalizeFormDraft = (r: FormDraft | null): {
+    clinic: string[];
+    symptoms: string[];
+    note: string;
+    is_refer_case: boolean;
+  } => {
+    const toArray = (v: unknown): string[] =>
+      Array.isArray(v) ? v.filter(Boolean).map(String) : v != null ? [String(v)] : []
+
+    if (!r) {
+      return {
+        clinic: [],
+        symptoms: [],
+        note: '',
+        is_refer_case: false,
+      }
+    }
+
+    return {
+      clinic: toArray(r.clinic),
+      symptoms: toArray(r.symptoms),
+      note: r.note ?? '',
+      is_refer_case: !!r.is_refer_case,
+    }
+  }
+
+  const [selectedQuestions, setSelectedQuestions] = useState<string[]>([])
+  const [selectedQuestionKeys, setSelectedQuestionKeys] = useState<string[]>([])
+
+  const [questionResults, setQuestionResults] = useState<Record<string, FormDraft>>({})
+
+  const [answers, setAnswers] = useState<Record<string, any>>({})
+  const [routingClinics, setRoutingClinics] = useState<string[]>([])
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [finished, setFinished] = useState(false)
+  const { refreshCardData } = useThaiID()
+  const [showCheckmark, setShowCheckmark] = useState(false)
+  const hasShownToastRef = useRef(false)
+  const [isLoading, setIsLoading] = useState(false)
+  const { addToast } = useToast()
+  const { user } = useAuth()
+  const hasRedirected = useRef(false)
+
+  useEffect(() => {
+    setSelectedQuestionKeys(selectedQuestions)
+  }, [selectedQuestions])
+
+  const questionOptions = Object.keys(Questions).map((key, index) => ({
+    value: key,
+    label: `ข้อที่ ${index + 1}: ${getTitle(index + 1)}`,
+  }))
+
+  function getTitleFromKey(key: string): string {
+    const match = key.match(/\d+/)
+    if (!match) return ''
+    const index = parseInt(match[0], 10)
+    return getTitle(index)
+  }
+
+  // 1) เมื่อมีการเปลี่ยน thaiIDData → เซต manualData + เรียก FrontAgent + ดึงสิทธิ
+  useEffect(() => {
+    if (!thaiIDData?.cid) return
+
+    const baseUrl = process.env.NEXT_PUBLIC_FORM_API
+    const cardUrl = process.env.NEXT_PUBLIC_CARD_API
+
+    // Reset
+    setManualData({
       cid: '',
       titleNameTh: '',
       firstNameTh: '',
@@ -29,10 +137,11 @@
       gender: '',
       address: {
         Full: '',
+        HouseNo: '',
         Tumbol: '',
         Amphur: '',
         Province: '',
-        Moo: ''
+        Moo: '',
       },
       issueDate: '',
       expiryDate: '',
@@ -46,197 +155,115 @@
       photo: '',
     })
 
-    type QuestionResult = {
-      case_id: string;
-      question_key: string;
-      clinic: string | null;
-      is_refer_case: boolean;
-      note?: string;
-      symptoms?: string[];
-      answers?: Record<string, any>;
-      routed_by?: any;
-      created_at: string;
-    };
+    setSelectedQuestions([])
+    setSelectedQuestionKeys([])
+    setQuestionResults({})
+    setFinished(false)
 
-    type QuestionResultWithMeta = QuestionResult & {
-      question: string;
-      question_code: number;
-      question_title: string;
-      isReferCase: boolean;
-    };
+    // ดึงข้อมูลจาก FrontAgent
+    fetch(`${cardUrl}/get_cid_data?callback=cb&section1=true&section2a=true&section2c=true`)
+      .then((res) => res.text())
+      .then((text) => {
+        const jsonText = text.replace(/^\/\*\*\/cb\((.*)\);$/, '$1')
+        const data = JSON.parse(jsonText)
+        const cid = data.CitizenID
 
-    const Questions = allQuestionsRaw as Record<
-      string,
-      React.ComponentType<{ onResult: (result: any) => void; type?: string }>
-    >
+        setManualData((prev) => ({
+          ...prev,
+          cid,
+          titleNameTh: data.TitleNameTh || '',
+          firstNameTh: data.FirstNameTh || '',
+          lastNameTh: data.LastNameTh || '',
+          birthDate: data.BirthDate || '',
+          gender: data.Gender || '',
+          photo: data.PhotoBase64 || '',
+          address: {
+            Full: data.Full || '',
+            HouseNo: data.HouseNo || '',
+            Tumbol: data.Tumbol || '',
+            Amphur: data.Amphur || '',
+            Province: data.Province || '',
+            Moo: data.Moo || '',
+          },
+        }))
 
-    const [selectedQuestions, setSelectedQuestions] = useState<string[]>([])
-    const [selectedQuestionKeys, setSelectedQuestionKeys] = useState<string[]>([])
-    const [questionResults, setQuestionResults] = useState<Record<string, QuestionResult>>({})
-    const [answers, setAnswers] = useState<Record<string, any>>({})
-    const [routingClinics, setRoutingClinics] = useState<string[]>([])
-    const [showConfirm, setShowConfirm] = useState(false)
-    const [finished, setFinished] = useState(false)
-    const { refreshCardData } = useThaiID();
-    const [showCheckmark, setShowCheckmark] = useState(false)
-    const hasShownToastRef = useRef(false)
-    const [isLoading, setIsLoading] = useState(false);
-    const { addToast } = useToast()
+        // ดึงสิทธิ
+        if (!baseUrl) return
+        fetch(`${baseUrl}/v1/searchCurrentByPID/${cid}`)
+          .then((res) => res.json())
+          .then((result) => {
+            const info = result?.data
+            if (!info) return
 
-    useEffect(() => {
-      setSelectedQuestionKeys(selectedQuestions)
-    }, [selectedQuestions])
-
-    const questionOptions = Object.keys(Questions).map((key, index) => ({
-      value: key,
-      label: `ข้อที่ ${index + 1}: ${getTitle(index + 1)}`
-    }))
-
-    function getTitleFromKey(key: string): string {
-      const match = key.match(/\d+/)
-      if (!match) return ''
-      const index = parseInt(match[0])
-      return getTitle(index)
-    }
-
-    // 1. เมื่อมีการเปลี่ยน thaiIDData → เซต manualData + เรียก FrontAgent + ดึงสิทธิ
-    useEffect(() => {
-      if (!thaiIDData?.cid) return;
-
-      const baseUrl = process.env.NEXT_PUBLIC_FORM_API;
-      const cardUrl = process.env.NEXT_PUBLIC_CARD_API || 'http://localhost:5000';
-
-      // Step 1: Reset data
-      setManualData({
-        cid: '',
-        titleNameTh: '',
-        firstNameTh: '',
-        lastNameTh: '',
-        birthDate: '',
-        gender: '',
-        address: {
-          Full: '',
-          HouseNo: '', 
-          Tumbol: '',
-          Amphur: '',
-          Province: '',
-          Moo: ''
-        },
-        issueDate: '',
-        expiryDate: '',
-        maininscl_name: '',
-        hmain_name: '',
-        hsub_name: '',
-        primary_province_name: '',
-        primary_amphur_name: '',
-        primary_tumbon_name: '',
-        primary_mooban_name: '',
-        photo: '',
-      });
-
-      setSelectedQuestions([]);
-      setSelectedQuestionKeys([]);
-      setQuestionResults({});
-      setAnswers({});
-      setFinished(false);
-
-      // Step 2: ดึง cid จาก FrontAgent
-      fetch(`${cardUrl}/get_cid_data?callback=cb&section1=true&section2a=true&section2c=true`)
-        .then(res => res.text())
-        .then(text => {
-          const jsonText = text.replace(/^\/\*\*\/cb\((.*)\);$/, '$1');
-          const data = JSON.parse(jsonText);
-          const cid = data.CitizenID;
-
-          setManualData(prev => ({
-            ...prev,
-            cid,
-            titleNameTh: data.TitleNameTh || '',
-            firstNameTh: data.FirstNameTh || '',
-            lastNameTh: data.LastNameTh || '',
-            birthDate: data.BirthDate || '',
-            gender: data.Gender || '',
-            photo: data.PhotoBase64 || '',
-            address: {
-              Full: data.Full || '',
-              HouseNo: data.HouseNo || '', 
-              Tumbol: data.Tumbol || '',
-              Amphur: data.Amphur || '',
-              Province: data.Province || '',
-              Moo: data.Moo || ''
+            const toDate = (val?: string) => {
+              if (!val || val.length !== 8) return ''
+              const y = parseInt(val.slice(0, 4), 10) - 543
+              const m = val.slice(4, 6)
+              const d = val.slice(6, 8)
+              return `${y}-${m}-${d}`
             }
-          }));
 
-          // Step 3: ดึงสิทธิ
-          if (!baseUrl) return;
-
-          fetch(`${baseUrl}/v1/searchCurrentByPID/${cid}`)
-            .then(res => res.json())
-            .then(result => {
-              const info = result?.data;
-              if (!info) return;
-
-              const toDate = (val?: string) => {
-                if (!val || val.length !== 8) return '';
-                const y = parseInt(val.slice(0, 4), 10) - 543;
-                const m = val.slice(4, 6);
-                const d = val.slice(6, 8);
-                return `${y}-${m}-${d}`;
-              };
-
-              setManualData(prev => ({
-                ...prev,
-                maininscl_name: info.maininscl_name || '',
-                hmain_name: info.hmain_name || '',
-                hsub_name: info.hsub_name || '',
-                issueDate: toDate(info.startdate),
-                expiryDate: toDate(info.expdate),
-              }));
-            })
-            .catch(err => console.error('❌ Fetch NHOS rights error:', err));
-        })
-        .catch(err => {
-          console.error('❌ Fetch FrontAgent error:', err);
-          addToast({
-            type: 'error',
-            icon: <AlertCircle size={20} />,
-            message: 'อ่านบัตรไม่สำเร็จ หรือไม่พบข้อมูล',
-            position: 'top-right'
-          });
-        });
-    }, [thaiIDData]);
-
-    // ฟังก์ชันเพื่อให้ฟอร์มล้างข้อมูล
-    const handleClearForm = () => {
-      resetData() // รีเซ็ตข้อมูลใน context
-      setManualData({
-        cid: '',
-        titleNameTh: '',
-        firstNameTh: '',
-        lastNameTh: '',
-        birthDate: '',
-        gender: '',
-        address: {
-          Full: '',
-          Tumbol: '',
-          Amphur: '',
-          Province: '',
-          Moo: ''
-        },
-        issueDate: '',
-        expiryDate: '',
-        maininscl_name: '',
-        hmain_name: '',
-        hsub_name: '',
-        primary_province_name: '',
-        primary_amphur_name: '',
-        primary_tumbon_name: '',
-        primary_mooban_name: '',
-        photo: '',
+            setManualData((prev) => ({
+              ...prev,
+              maininscl_name: info.maininscl_name || '',
+              hmain_name: info.hmain_name || '',
+              hsub_name: info.hsub_name || '',
+              issueDate: toDate(info.startdate),
+              expiryDate: toDate(info.expdate),
+            }))
+          })
+          .catch((err) => console.error('❌ Fetch NHOS rights error:', err))
       })
-      // รีเฟรชหน้าเพื่อตั้งค่าการอ่านบัตรใหม่
-      router.refresh() // รีเฟรชหน้าเพื่อให้ `useEffect` ของ ThaiIDProvider ทำงานใหม่
-    }
+      .catch((err) => {
+        console.error('❌ Fetch FrontAgent error:', err)
+        addToast({
+          type: 'error',
+          icon: <AlertCircle size={20} />,
+          message: 'อ่านบัตรไม่สำเร็จ หรือไม่พบข้อมูล',
+          position: 'top-right',
+        })
+      })
+  }, [thaiIDData])
+
+  // ล้างฟอร์ม
+  const handleClearForm = () => {
+    resetData()
+    setManualData({
+      cid: '',
+      titleNameTh: '',
+      firstNameTh: '',
+      lastNameTh: '',
+      birthDate: '',
+      gender: '',
+      address: {
+        Full: '',
+        HouseNo: '',
+        Tumbol: '',
+        Amphur: '',
+        Province: '',
+        Moo: '',
+      },
+      issueDate: '',
+      expiryDate: '',
+      maininscl_name: '',
+      hmain_name: '',
+      hsub_name: '',
+      primary_province_name: '',
+      primary_amphur_name: '',
+      primary_tumbon_name: '',
+      primary_mooban_name: '',
+      photo: '',
+    })
+
+    addToast({
+      type: 'success',
+      message: 'ล้างข้อมูลเรียบร้อยแล้ว',
+      position: 'top-right',
+      duration: 3000, 
+    })
+
+    router.refresh()
+  }
 
   const handleInputChange = (field: keyof PatientData, value: string) => {
     setManualData({ ...manualData, [field]: value })
@@ -244,229 +271,203 @@
 
   const getAgeFromBirthDate = (birthDate?: string): string => {
     if (!birthDate || birthDate.length < 8) return 'ไม่ระบุ'
-
     const y = parseInt(birthDate.substring(0, 4), 10)
-    const yearCE = y > 2500 ? y - 543 : y 
-
+    const yearCE = y > 2500 ? y - 543 : y
     const m = parseInt(birthDate.substring(4, 6), 10) - 1
     const d = parseInt(birthDate.substring(6, 8), 10)
     const birth = new Date(yearCE, m, d)
     const today = new Date()
-
     let age = today.getFullYear() - birth.getFullYear()
-    if (
-      today.getMonth() < birth.getMonth() ||
-      (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())
-    ) {
+    if (today.getMonth() < birth.getMonth() || (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())) {
       age--
     }
-
     return isNaN(age) ? 'ไม่ระบุ' : age.toString()
   }
 
   const formatDateForInput = (raw: string, isBirthDate: boolean = false): string => {
-    if (!raw) return '';
-
-    // รูปแบบ yyyy-mm-dd อยู่แล้ว
-    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) {
-      return raw;
-    }
-
-    // รูปแบบ 8 หลัก เช่น 25470323 หรือ 20040323
+    if (!raw) return ''
+    if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw
     if (/^\d{8}$/.test(raw)) {
-      let yyyy = parseInt(raw.substring(0, 4), 10);
-      const mm = raw.substring(4, 6);
-      const dd = raw.substring(6, 8);
-      return `${yyyy}-${mm}-${dd}`;
+      const yyyy = parseInt(raw.substring(0, 4), 10)
+      const mm = raw.substring(4, 6)
+      const dd = raw.substring(6, 8)
+      return `${yyyy}-${mm}-${dd}`
     }
-
-    // รูปแบบ dd/mm/yyyy
     if (raw.includes('/')) {
-      const [dd, mm, yy] = raw.split('/');
-      let yyyy = parseInt(yy, 10);
-      return `${yyyy}-${mm}-${dd}`;
+      const [dd, mm, yy] = raw.split('/')
+      const yyyy = parseInt(yy, 10)
+      return `${yyyy}-${mm}-${dd}`
     }
-
-    return raw;
-  };
+    return raw
+  }
 
   const handleQuestionAnswer = (key: string, answer: any) => {
-    const newAnswers = { ...answers, [key]: answer }
-    setAnswers(newAnswers)
-    const result = checkRouting(newAnswers)
+  const result = checkRouting({ [key]: answer }) 
     setRoutingClinics(result)
     setShowConfirm(result.length > 0)
   }
 
   const patientInfo = manualData
 
-  const handleSave = async () => {
-    if (hasShownToastRef.current || isLoading) return;
-    hasShownToastRef.current = true;
-    setIsLoading(true);
+    const handleSave = async () => {
+      if (isLoading) return;
 
-    if (!manualData.cid || !/^\d{13}$/.test(manualData.cid)) {
-      addToast({
-        type: 'error',
-        icon: <AlertCircle size={20} />,
-        message: 'เลขบัตรประชาชนไม่ถูกต้อง',
-        position: 'top-right'
-      });
-      return;
-    }
-
-    if (!manualData.firstNameTh?.trim() || !manualData.lastNameTh?.trim()) {
-      addToast({
-        type: 'error',
-        icon: <AlertCircle size={20} />,
-        message: 'กรุณากรอกชื่อ-นามสกุลให้ครบ',
-        position: 'top-right'
-      });
-      return;
-    }
-
-    if (selectedQuestions.length === 0) {
-      addToast({
-        type: 'error',
-        icon: <AlertCircle size={20} />,
-        message: 'กรุณาเลือกหัวข้อคำถามอย่างน้อย 1 ข้อ',
-        position: 'top-right'
-      });
-      return;
-    }
-
-    try {
-      // ตรวจสอบ Base URL
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
-      if (!baseUrl) throw new Error('NEXT_PUBLIC_API_BASE_URL ไม่ถูกตั้งค่าใน .env');
-
-      // STEP 1: Validate token
-      const token = localStorage.getItem('token');
-      if (!token) throw new Error('กรุณาเข้าสู่ระบบก่อนบันทึกข้อมูล');
-
-      // STEP 2: Get user info
-      const meRes = await fetch(`${baseUrl}/api/me`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json'
-        }
-      });
-
-      if (!meRes.ok) {
-        const error = await meRes.json();
-        throw new Error(error.message || 'ไม่สามารถดึงข้อมูลผู้ใช้งาน');
+      // validate เบื้องต้น
+      if (!manualData.cid || !/^\d{13}$/.test(manualData.cid)) {
+        addToast({ type: 'error', icon: <AlertCircle size={20} />, message: 'เลขบัตรประชาชนไม่ถูกต้อง', position: 'top-right' });
+        return;
+      }
+      if (!manualData.firstNameTh?.trim() || !manualData.lastNameTh?.trim()) {
+        addToast({ type: 'error', icon: <AlertCircle size={20} />, message: 'กรุณากรอกชื่อ-นามสกุลให้ครบ', position: 'top-right' });
+        return;
+      }
+      if (selectedQuestions.length === 0) {
+        addToast({ type: 'error', icon: <AlertCircle size={20} />, message: 'กรุณาเลือกหัวข้อคำถามอย่างน้อย 1 ข้อ', position: 'top-right' });
+        return;
       }
 
-      const me = await meRes.json();
-      const routedBy = me.display_name || me.username || me.name || 'unknown';
+      setIsLoading(true);
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) throw new Error('กรุณาเข้าสู่ระบบก่อนบันทึกข้อมูล');
 
-      // STEP 3: Generate case ID
-      const caseId = uuidv4();
-      const formattedDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+        const meRes = await authAxios.get('/me');
+        const me = meRes.data;
+        const routedBy = me.display_name || me.username || me.name || 'unknown';
 
-      // STEP 4: Prepare question results
-      const resultsToSave = Object.entries(questionResults).map(([key, result]) => {
-        const safeSymptoms = Array.isArray(result.symptoms)
-          ? result.symptoms
-          : result.symptoms !== undefined
-          ? [String(result.symptoms)]
-          : [];
+        const caseId = uuidv4();
+        const formattedDate = new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+        const resultsToSave: QuestionResult[] = Object.entries(questionResults).map(([key, draft]) => {
+        const normalized = normalizeFormDraft(draft)
 
         return {
           case_id: caseId,
           question_key: key,
-          clinic: result.clinic || null,
-          is_refer_case: result.is_refer_case ?? false,
-          note: result.note || '',
-          symptoms: safeSymptoms,
-          answers: result.answers || {},
+          clinic: normalized.clinic,
+          is_refer_case: normalized.is_refer_case,
+          note: normalized.note,
+          symptoms: normalized.symptoms,
           routed_by: routedBy,
-          created_at: formattedDate
+          created_at: formattedDate,
+          type: 'form', 
+        }
+      })
+
+        const questionResultsWithMeta: QuestionResultWithMeta[] = resultsToSave.map((result, index) => {
+          const title = getTitleFromKey(result.question_key) || `คำถาม ${index + 1}`
+          return {
+            ...result,
+            question: result.question_key,
+            question_code: index + 1,
+            question_title: title,
+            isReferCase: result.is_refer_case,
+            type: 'form', 
+          }
+        })
+        
+        const summaryClinics = [
+          ...new Set(questionResultsWithMeta.flatMap((q) => (q.clinic.length > 0 ? q.clinic : []))),
+        ];
+        const summarySymptoms =
+          questionResultsWithMeta.length > 0
+            ? [...new Set(questionResultsWithMeta.flatMap((q) => q.symptoms ?? []))]
+            : [];
+
+        const formattedBirthDate = formatDateForInput(manualData.birthDate);
+        const ageStr = getAgeFromBirthDate(formattedBirthDate);
+        const parsedAge = isNaN(parseInt(ageStr)) ? 0 : parseInt(ageStr);
+
+        const payload: FormPPKPayload = {
+          case_id: caseId,
+          cid: manualData.cid.trim(),
+          name: `${manualData.titleNameTh || ''}${manualData.firstNameTh || ''} ${manualData.lastNameTh || ''}`.trim(),
+          age: parsedAge,
+          gender: manualData.gender || '',
+          maininscl_name: manualData.maininscl_name || '',
+          hmain_name: manualData.hmain_name || '',
+          created_at: formattedDate,
+          issueDate: manualData.issueDate,
+          expiryDate: manualData.expiryDate,
+          summary_clinics: summaryClinics,
+          symptoms: summarySymptoms.length > 0 ? summarySymptoms : ['ไม่มีอาการ'],
+          question_results: questionResultsWithMeta.map(({ isReferCase, ...rest }) => ({
+          ...rest,
+           is_refer_case: isReferCase ?? false,
+          }))
         };
-      });
+        
+        await authAxios.post('/form-ppk', payload);
 
-      // STEP 5: Validate patient data
-      if (!manualData?.cid) throw new Error('กรุณากรอกเลขบัตรประชาชน');
-      if (!manualData?.firstNameTh) throw new Error('กรุณากรอกชื่อผู้ป่วย');
-
-      // STEP 5.5: เพิ่มข้อมูล meta
-      const questionResultsWithMeta: QuestionResultWithMeta[] = resultsToSave.map((result, index) => {
-        const title = getTitleFromKey(result.question_key) || `คำถาม ${index + 1}`;
-        return {
-          ...result,
-          question: result.question_key,
-          question_code: index + 1,
-          question_title: title,
-          isReferCase: result.is_refer_case ?? false
-        };
-      });
-
-      // STEP 5.6: สรุปคลินิก + อาการ
-      const summaryClinics = [
-        ...new Set(questionResultsWithMeta.flatMap(q => q.clinic ? [q.clinic] : [])),
-      ];
-
-      const summarySymptoms =
-        questionResultsWithMeta.length > 0
-          ? [...new Set(questionResultsWithMeta.flatMap(q => q.symptoms ?? []))]
-          : [];
-
-      // STEP 6: Prepare payload
-      const formattedBirthDate = formatDateForInput(manualData.birthDate);
-      const age = getAgeFromBirthDate(formattedBirthDate);
-      const parsedAge = isNaN(parseInt(age)) ? 0 : parseInt(age);
-
-      const payload = {
-        case_id: caseId,
-        cid: manualData.cid.trim(),
-        name: `${manualData.titleNameTh || ''}${manualData.firstNameTh || ''} ${manualData.lastNameTh || ''}`.trim(),
-        age: parsedAge,
-        gender: manualData.gender || '',
-        maininscl_name: manualData.maininscl_name || '',
-        hmain_name: manualData.hmain_name || '',
-        created_at: formattedDate,
-        issueDate: manualData.issueDate,
-        expiryDate: manualData.expiryDate,
-        summary_clinics: summaryClinics,
-        symptoms: summarySymptoms.length > 0 ? summarySymptoms : ['ไม่มีอาการ'],
-        question_results: questionResultsWithMeta,
-      };
-
-      // STEP 7: Send to API
-      const saveRes = await fetch(`${baseUrl}/form-ppk`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!saveRes.ok) {
-        const errorDetails = await saveRes.json();
-        throw new Error(JSON.stringify(errorDetails) || 'ไม่สามารถบันทึกข้อมูลได้');
+        addToast({ type: 'success', icon: <CheckCircle size={20} />, message: 'บันทึกข้อมูลสำเร็จ', position: 'top-right' });
+        setFinished(true);
+      } catch (error: unknown) {
+        const errMsg = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
+        addToast({ type: 'error', icon: <AlertCircle size={20} />, message: errMsg, position: 'top-right' });
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-      addToast({
-        type: 'success',
-        icon: <CheckCircle size={20} />,
-        message: 'บันทึกข้อมูลสำเร็จ',
-        position: 'top-right'
-      });
+  useEffect(() => {
+    if (!finished || hasRedirected.current) return;
 
-    } catch (error: unknown) {
-      const errMsg = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-      addToast({
-        type: 'error',
-        icon: <AlertCircle size={20} />,
-        message: errMsg,
-        position: 'top-right'
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    const qWithMeta: QuestionResultWithMeta[] = Object.entries(questionResults).map(([key, draft], idx) => {
+      const safeSymptoms = Array.isArray(draft.symptoms)
+        ? draft.symptoms.filter(Boolean).map(String)
+        : draft.symptoms != null
+        ? [String(draft.symptoms)]
+        : [];
+
+      const safeClinic: string[] = Array.isArray(draft.clinic)
+        ? draft.clinic.map(String).filter(Boolean)
+        : draft.clinic
+        ? [String(draft.clinic)]
+        : [];
+
+      return {
+        case_id: 'print-only',
+        question_key: key,
+        clinic: safeClinic,
+        is_refer_case: !!draft.is_refer_case,
+        note: draft.note ?? '',
+        symptoms: safeSymptoms,
+        routed_by: user?.name || 'ไม่ระบุ',
+        created_at: new Date().toISOString().slice(0, 19).replace('T', ' '),
+
+        question: key,
+        question_code: idx + 1,
+        question_title: getTitleFromKey(key) || `คำถาม ${idx + 1}`,
+        isReferCase: !!draft.is_refer_case,
+
+        type: 'form',
+      };
+    });
+
+  const summaryClinics = [...new Set(qWithMeta.flatMap((q) => (q.clinic.length > 0 ? q.clinic : [])))];
+
+  const printData = {
+    patientName: `${manualData.titleNameTh || ''}${manualData.firstNameTh || ''} ${manualData.lastNameTh || ''}`.trim(),
+    maininscl_name: manualData.maininscl_name || '',
+    printedAt: new Date().toISOString(),
+    routedBy: user?.name || 'ไม่ระบุ',
+    topics: qWithMeta.map((q) => ({
+      code: q.question,
+      title: q.question_title,
+      note: q.note || '-',
+    })),
+    referredClinics: summaryClinics.map((code: string) => clinicLabelMap[code] || code),
   };
+
+  try {
+    localStorage.setItem('printSummary', JSON.stringify(printData));
+  } catch (e) {
+    console.warn('save printSummary failed', e);
+  }
+
+  hasRedirected.current = true;
+    router.replace('/printsummary');
+  }, [finished, questionResults, manualData, user, router]);
 
   return (
     <motion.div
@@ -627,7 +628,7 @@
                   <input
                     id="age"
                     name="age"
-                    value={manualData.age || getAgeFromBirthDate(manualData.birthDate)}
+                    value={getAgeFromBirthDate(manualData.birthDate)}
                     readOnly
                   />
                 </div>
@@ -856,10 +857,10 @@
             type="button"
             onClick={handleClearForm}
             className={styles['formppk-btn-clear']}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
+            whileHover={{ scale: 1.03 }}
+            whileTap={{ scale: 0.97 }}
           >
-            <Trash2 className={styles['formppk-btn-clear-icon']} />
+            <Trash2 className={styles['formppk-btn-clear-icon']} size={16} strokeWidth={1.6} />
             ล้างข้อมูล
           </motion.button>
         </div>
@@ -875,15 +876,19 @@
                   <div className={styles['formppk-question-title']}>{getTitleFromKey(key)}</div>
                   <div className={styles['formppk-question-body']}>
                     <QuestionComponent
-                      type="form" 
-                      onResult={(result: any) => {
-                        setQuestionResults(prev => ({
-                          ...prev,
-                          [key]: {
-                            ...result,
-                            type: 'form', 
-                          },
-                        }))
+                      type="form"
+                      onResult={(res: any) => {
+                        if (res == null) {
+                          setQuestionResults(prev => {
+                            const { [key]: _, ...rest } = prev
+                            return rest
+                          })
+                        } else {
+                          setQuestionResults(prev => ({
+                            ...prev,
+                            [key]: normalizeFormDraft(res),
+                          }))
+                        }
                       }}
                     />
                   </div>
@@ -894,48 +899,63 @@
         )}
 
         {/* กล่องแสดงผลแนะนำห้องตรวจ */}
-        {Object.keys(questionResults).length > 0 && !finished && (
-          <section className={styles['formppk-referral-box']}>
-            <div className={styles['formppk-referral-title']}>
-              <motion.div
-                initial={{ scale: 0, rotate: -45 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ type: 'spring', stiffness: 300, damping: 15 }}
-                className={styles['formppk-referral-icon-success']}
-              >
-                <CheckCircle />
-              </motion.div>
-              ระบบแนะนำให้ส่งต่อไปยัง
-            </div>
+          {Object.keys(questionResults).length > 0 && !finished && (
+            <section className={styles['formppk-referral-box']}>
+              <div className={styles['formppk-referral-title']}>
+                <motion.div
+                  initial={{ scale: 0, rotate: -45 }}
+                  animate={{ scale: 1, rotate: 0 }}
+                  transition={{ type: 'spring', stiffness: 300, damping: 15 }}
+                  className={styles['formppk-referral-icon-success']}
+                >
+                  <CheckCircle />
+                </motion.div>
+                ระบบแนะนำให้ส่งต่อไปยัง
+              </div>
 
-            <ul className={styles['formppk-referral-list']}>
-              {Object.entries(questionResults).map(([key, result]) => (
-                <li key={key} className={styles['formppk-referral-item']}>
-                  <Hospital className={styles['formppk-referral-icon-hospital']} />
-                  <span className={styles['formppk-referral-item-label']}>{getTitleFromKey(key)}:</span>
-                  <span className={styles['formppk-referral-item-value']}>
-                    {clinicLabelMap[result?.clinic ?? ''] ?? result?.clinic ?? 'ไม่ระบุ'}
-                  </span>
-                </li>
-              ))}
-            </ul>
+              <ul className={styles['formppk-referral-list']}>
+                {/* วนตาม selectedQuestions เพื่อคงลำดับ */}
+                {selectedQuestions
+                  .filter(key => questionResults[key]?.clinic)
+                  .map((key) => {
+                    const result = questionResults[key];
 
-            <div className={styles['formppk-referral-actions']}>
-              <button
-                className={styles['formppk-btn-confirm']}
-                onClick={(e) => {
-                  e.preventDefault()
-                  handleSave()
-                }}
-                disabled={isLoading}
-              >
-                {isLoading ? 'กำลังบันทึก...' : 'ยืนยันการส่งต่อและพิมพ์แบบฟอร์ม'}
-              </button>
-            </div>
-          </section>
-        )}
+                    if (!result || !result.clinic) return null;
 
-      </form>
+                    const clinic = result.clinic; 
+
+                    return (
+                      <li key={key} className={styles['formppk-referral-item']}>
+                        <Hospital className={styles['formppk-referral-icon-hospital']} />
+                        <span className={styles['formppk-referral-item-label']}>
+                          {getTitleFromKey(key)}:
+                        </span>
+                       <span className={styles['formppk-referral-item-value']}>
+                          {Array.isArray(clinic)
+                            ? clinic.map((code: string) => clinicLabelMap[code] ?? code).join(', ')
+                            : clinicLabelMap[clinic] ?? clinic}
+                        </span>
+                      </li>
+                    );
+                  })}
+              </ul>
+
+
+              <div className={styles['formppk-referral-actions']}>
+                <button
+                  className={styles['formppk-btn-confirm']}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    handleSave()
+                  }}
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'กำลังบันทึก...' : 'ยืนยันการส่งต่อและพิมพ์แบบฟอร์ม'}
+                </button>
+              </div>
+            </section>
+          )}
+      </form> 
      </motion.div>
     )
   }

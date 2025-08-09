@@ -12,6 +12,7 @@ export interface Question14Result {
   note?: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
 }
 
 interface Props {
@@ -74,6 +75,7 @@ export default function Question14_RespInfect({ onResult }: Props) {
       note,
       symptoms,
       isReferCase,
+      routedBy: 'auto',
     })
   }, [suspectDisease, hasCalledOPD, customClinic, noteExtra])
 

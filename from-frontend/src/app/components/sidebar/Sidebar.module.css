@@ -1,14 +1,17 @@
-/* จัด Layout ให้ Sidebar ใช้ใน Flex Container ได้พอดี */
+/* ---------- Desktop Layout (Default ≥1025px) ---------- */
 .sidebar {
-  flex: 0 0 260px;           /* fix ความกว้างพอดี */
+  flex: 0 0 260px;
   background: #ffffff;
   border-right: 1px solid #e6e6e6;
   padding: 1rem;
   font-family: 'Sarabun', sans-serif;
-  box-shadow: 1px 0 3px rgba(0,0,0,0.05);
-  height: 100vh;             /* เต็มความสูงหน้าจอ */
-  overflow-y: auto;          /* เลื่อนขึ้นลงได้ */
-  overflow-x: hidden;        /* ไม่ให้เลื่อนซ้ายขวา */
+  box-shadow: 1px 0 3px rgba(0, 0, 0, 0.05);
+  height: 100vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  transition: all 0.3s ease-in-out;
+  position: relative;
+  z-index: 100;
 }
 
 /* Scrollbar */
@@ -19,13 +22,14 @@
   background: #f1f1f1;
 }
 .sidebar::-webkit-scrollbar-thumb {
-  background-color: rgba(0,0,0,0.15);
+  background-color: rgba(0, 0, 0, 0.15);
   border-radius: 3px;
 }
 .sidebar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0,0,0,0.3);
+  background-color: rgba(0, 0, 0, 0.3);
 }
 
+/* Search */
 .searchWrapper {
   display: flex;
   align-items: center;
@@ -45,6 +49,7 @@
   outline: none;
 }
 
+/* Sections */
 .section {
   margin-bottom: 0.8rem;
 }
@@ -65,6 +70,7 @@
   color: #1e40af;
 }
 
+/* Links */
 .linkList {
   list-style: none;
   padding-left: 0.6rem;
@@ -85,8 +91,30 @@
   background: #f2f6ff;
   color: #1e40af;
 }
+
 .active {
   background: #e8f0ff;
   color: #1e40af;
   font-weight: 600;
+}
+
+/* ---------- iPad (แนวตั้ง/แนวนอน ≤1024px) ---------- */
+@media (max-width: 1024px) {
+  .sidebar {
+    flex: 0 0 220px;
+    padding: 0.75rem;
+  }
+
+  .searchInput {
+    font-size: 0.85rem;
+  }
+
+  .sectionToggle {
+    font-size: 0.9rem;
+  }
+
+  .link {
+    font-size: 0.85rem;
+    padding: 0.3rem 0.5rem;
+  }
 }

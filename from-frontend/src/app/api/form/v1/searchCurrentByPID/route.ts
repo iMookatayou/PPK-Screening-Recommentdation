@@ -12,11 +12,9 @@ function formatThaiDate(thaiDateStr?: string): string | null {
   }
 }
 
-export async function GET(
-  req: NextRequest,
-  { params }: { params: { cid: string } }
-) {
-  const { cid } = params
+export async function GET(req: NextRequest) {
+  const url = new URL(req.url)
+  const cid = url.searchParams.get('cid') || ''
 
   if (!cid || cid.length !== 13) {
     return NextResponse.json({ error: 'Invalid CID' }, { status: 400 })
@@ -25,7 +23,7 @@ export async function GET(
   const backendURL =
     process.env.NEXT_PUBLIC_FORM_API?.trim() !== ''
       ? `${process.env.NEXT_PUBLIC_FORM_API}/v1/searchCurrentByPID/${cid}`
-      : 'http://localhost:5000/v1/searchCurrentByPID/' + cid
+      : `http://localhost:5000/v1/searchCurrentByPID/${cid}`
 
   try {
     const res = await fetch(backendURL, { cache: 'no-store' })

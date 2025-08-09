@@ -1,13 +1,14 @@
 'use client'
 
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect
+} from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
-import {
-  CheckCircle,
-  XCircle,
-  AlertTriangle,
-  Info
-} from 'lucide-react'
+import { CheckCircle, XCircle, AlertTriangle, Info } from 'lucide-react'
 import { v4 as uuidv4 } from 'uuid'
 
 type ToastType = 'success' | 'error' | 'warning' | 'info'
@@ -42,6 +43,12 @@ export const useToast = () => {
 
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastItem[]>([])
+  const [mounted, setMounted] = useState(false)
+
+  // ✅ สำคัญ! เพื่อให้ ReactDOM.createPortal ไม่รันบน SSR
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   const addToast = useCallback((toast: Omit<ToastItem, 'id'>) => {
     const id = uuidv4()
@@ -54,20 +61,20 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   return (
     <ToastContext.Provider value={{ addToast }}>
       {children}
-      <ToastContainer toasts={toasts} />
+      {mounted && typeof window !== 'undefined' && (
+        <div id="__toast-root__">
+          <ToastContainer toasts={toasts} />
+        </div>
+      )}
     </ToastContext.Provider>
   )
 }
 
 const ToastContainer: React.FC<{ toasts: ToastItem[] }> = ({ toasts }) => {
-  const positions = [
-    'top-left',
-    'top-right',
-    'top-center',
-    'bottom-left',
-    'bottom-right',
-    'bottom-center'
-  ] as ToastPosition[]
+  const positions: ToastPosition[] = [
+    'top-left', 'top-right', 'top-center',
+    'bottom-left', 'bottom-right', 'bottom-center'
+  ]
 
   return (
     <>
@@ -94,7 +101,8 @@ const ToastContainer: React.FC<{ toasts: ToastItem[] }> = ({ toasts }) => {
                     alignItems: 'center',
                     gap: '0.5rem',
                     marginBottom: 10,
-                    minWidth: 250
+                    minWidth: 250,
+                    pointerEvents: 'auto'
                   }}
                 >
                   {t.icon ?? getDefaultIcon(t.type)}
@@ -132,7 +140,7 @@ const getPositionStyle = (pos: ToastPosition): React.CSSProperties => {
     position: 'fixed' as const,
     zIndex: 9999,
     padding: '0.5rem',
-    pointerEvents: 'none' as React.CSSProperties['pointerEvents'] 
+    pointerEvents: 'none' as React.CSSProperties['pointerEvents']
   }
   switch (pos) {
     case 'top-left': return { ...base, top: 20, left: 20 }
@@ -143,4 +151,3 @@ const getPositionStyle = (pos: ToastPosition): React.CSSProperties => {
     case 'bottom-center': return { ...base, bottom: 20, left: '50%', transform: 'translateX(-50%)' }
   }
 }
-

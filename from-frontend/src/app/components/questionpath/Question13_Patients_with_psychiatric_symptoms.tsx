@@ -1,7 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { getThaiDayNumber } from '@/lib/dateUtils'
+import React, { useEffect, useRef, useState } from 'react'
 
 export interface Question13Result {
   question: string
@@ -11,56 +10,71 @@ export interface Question13Result {
   note: string
   symptoms: string[]
   isReferCase: boolean
+  type: string
 }
 
 interface PsychCaseProps {
-  onResult: (result: Question13Result) => void
+  onResult: (result: Question13Result | null) => void
+  type: string
 }
 
-export default function Question13_PsychCase({ onResult }: PsychCaseProps) {
+export default function Question13_PsychCase({ onResult, type }: PsychCaseProps) {
   const [caseType, setCaseType] = useState<'' | 'new' | 'old'>('')
   const [hasPhysicalSymptom, setHasPhysicalSymptom] = useState(false)
   const [extraNote, setExtraNote] = useState('')
+  const prevKeyRef = useRef('')
 
   useEffect(() => {
-    if (!caseType) return
+    if (!caseType) {
+      onResult(null)
+      return
+    }
 
     let clinic: string[] = []
     let isReferCase = false
-    let note = ''
     const symptoms: string[] = ['psych_case']
+    const noteParts: string[] = []
 
     if (caseType === 'new') {
       clinic = ['psych']
-      note = 'New case: vital sign ปกติ, DTX ปกติ, ไม่มีอาการก้าวร้าว'
+      noteParts.push('New case: vital sign ปกติ, DTX ปกติ, ไม่มีอาการก้าวร้าว')
       symptoms.push('new_case', 'no_physical')
-    } else if (caseType === 'old' && !hasPhysicalSymptom) {
-      clinic = ['psych']
-      note = 'Old case: ไม่มีภาวะผิดปกติทางกายร่วมด้วย'
-      symptoms.push('old_case', 'no_physical')
-    } else if (caseType === 'old' && hasPhysicalSymptom) {
-      clinic = ['muang']
-      isReferCase = true
-      note =
-        'Old case: มาด้วยอาการเจ็บป่วยทางกาย vital sign, DTX ปกติ (ส่งรพ.เมือง หรือห้องตรวจตามอาการสำคัญ)'
-      symptoms.push('old_case', 'has_physical')
+    } else if (caseType === 'old') {
+      if (hasPhysicalSymptom) {
+        clinic = ['muang']
+        isReferCase = true
+        noteParts.push(
+          'Old case: มาด้วยอาการเจ็บป่วยทางกาย vital sign, DTX ปกติ (ส่งรพ.เมือง หรือห้องตรวจตามอาการสำคัญ)'
+        )
+        symptoms.push('old_case', 'has_physical')
+      } else {
+        clinic = ['psych']
+        noteParts.push('Old case: ไม่มีภาวะผิดปกติทางกายร่วมด้วย')
+        symptoms.push('old_case', 'no_physical')
+      }
     }
 
-    // รวมหมายเหตุเพิ่มเติมถ้ามี
     if (extraNote.trim()) {
-      note += ` | ${extraNote.trim()}`
+      noteParts.push(extraNote.trim())
     }
 
-    onResult({
-      question: 'PsychCase',
-      question_code: 13,
-      question_title: 'ผู้ป่วยจิตเวช (ใหม่/เก่า)',
-      clinic,
-      note,
-      symptoms,
-      isReferCase,
-    })
-  }, [caseType, hasPhysicalSymptom, extraNote])
+    const note = noteParts.join(' | ')
+    const key = `${caseType}-${hasPhysicalSymptom}-${extraNote.trim()}`
+
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResult({
+        question: 'PsychCase',
+        question_code: 13,
+        question_title: 'ผู้ป่วยจิตเวช (ใหม่/เก่า)',
+        clinic,
+        note,
+        symptoms,
+        isReferCase,
+        type,
+      })
+    }
+  }, [caseType, hasPhysicalSymptom, extraNote, type, onResult])
 
   return (
     <div className="space-y-4 text-sm">

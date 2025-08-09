@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getThaiDayNumber } from '@/lib/dateUtils'
 
 export interface Question10Result {
@@ -11,19 +11,28 @@ export interface Question10Result {
   note: string
   symptoms: string[]
   isReferCase: boolean
+  type: string
 }
 
 interface Question10Props {
-  onResult: (result: Question10Result) => void
+  onResult: (result: Question10Result | null) => void
+  type: string
 }
 
-export default function Question10_Injury({ onResult }: Question10Props) {
+export default function Question10_Injury({ onResult, type }: Question10Props) {
   const [choice, setChoice] = useState<'' | 'stable' | 'treated' | 'severe'>('')
   const [noteExtra, setNoteExtra] = useState('')
+  const prevKeyRef = useRef<string | null>(null)
   const day = getThaiDayNumber()
 
   useEffect(() => {
-    if (!choice) return
+    if (!choice) {
+      if (prevKeyRef.current !== 'null') {
+        prevKeyRef.current = 'null'
+        onResult(null)
+      }
+      return
+    }
 
     let clinic = ''
     const symptoms: string[] = ['injury']
@@ -33,18 +42,18 @@ export default function Question10_Injury({ onResult }: Question10Props) {
     switch (choice) {
       case 'stable':
         clinic = 'nite'
-        noteParts.push('Vital sign ปกติ และไม่มีบาดแผล')
         symptoms.push('stable')
+        noteParts.push('Vital sign ปกติ และไม่มีบาดแผล')
         break
       case 'treated':
         clinic = 'nite'
-        noteParts.push('ได้รับการรักษาแล้ว หรือไม่มีบาดแผลรุนแรง')
         symptoms.push('treated')
+        noteParts.push('ได้รับการรักษาแล้ว หรือไม่มีบาดแผลรุนแรง')
         break
       case 'severe':
         clinic = 'er'
-        noteParts.push('บาดแผลรุนแรง (เลือดออกมาก / กระดูกหักรุนแรง)')
         symptoms.push('severe')
+        noteParts.push('บาดแผลรุนแรง (เลือดออกมาก / กระดูกหักรุนแรง)')
         isReferCase = true
         break
     }
@@ -53,16 +62,28 @@ export default function Question10_Injury({ onResult }: Question10Props) {
       noteParts.push(noteExtra.trim())
     }
 
-    onResult({
-      question: 'InjuryCase',
-      question_code: 10,
-      question_title: 'ประเมินเคสบาดเจ็บ',
-      clinic: [clinic],
-      note: noteParts.join(' | '),
-      symptoms,
-      isReferCase,
+    const note = noteParts.join(' | ')
+
+    const key = JSON.stringify({
+      choice,
+      noteExtra,
+      type,
     })
-  }, [choice, noteExtra])
+
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResult({
+        question: 'InjuryCase',
+        question_code: 10,
+        question_title: 'ประเมินเคสบาดเจ็บ',
+        clinic: [clinic],
+        note,
+        symptoms,
+        isReferCase,
+        type,
+      })
+    }
+  }, [choice, noteExtra, type, onResult])
 
   return (
     <div className="space-y-4 text-sm text-gray-800">

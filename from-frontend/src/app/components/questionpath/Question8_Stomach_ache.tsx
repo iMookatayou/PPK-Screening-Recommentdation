@@ -12,21 +12,29 @@ export interface Question8Result {
   note: string
   symptoms: string[]
   isReferCase: boolean
+  type: string
 }
 
 interface Question8Props {
-  onResult: (result: Question8Result) => void
+  onResult: (result: Question8Result | null) => void
+  type: string
 }
 
-export default function Question8_Stomach_ache({ onResult }: Question8Props) {
-  const [location, setLocation] = useState<StomachPainLocation | ''>('') // ต้องเลือกก่อน
+export default function Question8_Stomach_ache({ onResult, type }: Question8Props) {
+  const [location, setLocation] = useState<StomachPainLocation | ''>('')
   const [painScale, setPainScale] = useState<number>(3)
   const [noteExtra, setNoteExtra] = useState<string>('')
 
-  const prevRef = useRef<string>('')
+  const prevKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!location || !painScale) return
+    if (!location) {
+      if (prevKeyRef.current !== 'null') {
+        prevKeyRef.current = 'null'
+        onResult(null)
+      }
+      return
+    }
 
     const symptoms: string[] = ['abdominal_pain', location]
     let clinic: string[] = []
@@ -40,17 +48,24 @@ export default function Question8_Stomach_ache({ onResult }: Question8Props) {
       noteParts.push('จุกแน่นใต้ลิ้นปี่ (สงสัย Gastritis, Dyspepsia)')
     }
 
-    noteParts.push(`ระดับความเจ็บปวด: ${painScale}/10`)
+    noteParts.push(`ระดับความเจ็บปวด: ${painScale}/7`)
 
     if (noteExtra.trim()) {
       noteParts.push(`หมายเหตุ: ${noteExtra.trim()}`)
     }
 
     const note = noteParts.join(' | ')
-    const key = `${clinic.join()}-${location}-${painScale}-${noteExtra.trim()}`
 
-    if (prevRef.current !== key) {
-      prevRef.current = key
+    const key = JSON.stringify({
+      clinic,
+      location,
+      painScale,
+      noteExtra,
+      type,
+    })
+
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
       onResult({
         question: 'StomachAche',
         question_code: 8,
@@ -59,9 +74,10 @@ export default function Question8_Stomach_ache({ onResult }: Question8Props) {
         note,
         symptoms,
         isReferCase: true,
+        type,
       })
     }
-  }, [location, painScale, noteExtra])
+  }, [location, painScale, noteExtra, type, onResult])
 
   return (
     <div className="space-y-5 text-sm text-gray-800">

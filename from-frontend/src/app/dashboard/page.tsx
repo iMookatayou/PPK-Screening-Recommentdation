@@ -4,14 +4,15 @@ import React, { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { Bar } from 'react-chartjs-2'
 import 'chart.js/auto'
-import { RefreshCcw, ArrowLeftCircle, Clock, XCircle } from 'lucide-react'
+import { RefreshCcw, ArrowLeftCircle, XCircle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { getTitle } from '@/app/components/utils/getTitle'
 import styles from './styles/Dashboard.module.css'
+import LoadingSpinner from '@/app/components/ui/LoadingSpinner'
 
 type SummaryItem = {
-  question_key: string
-  clinic?: string | null
+  question_key?: string
+  question?: string
   total: number
 }
 
@@ -28,34 +29,59 @@ export default function ReferralStatsDashboardPage() {
       const token = localStorage.getItem('token')
       if (!token) throw new Error('Missing token')
 
-      const apiPath =
-        filterType === 'all'
-          ? '/referral-guidances/summary-all'
-          : filterType === 'referral'
-          ? '/referral-guidances/summary'
-          : '/form-ppk/summary'
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        Accept: 'application/json',
+      }
 
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${apiPath}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/json',
-        },
-      })
+      const fetchSummary = async (path: string) => {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}${path}`, { headers })
+        if (!res.ok) throw new Error(`API "${path}" โหลดข้อมูลไม่สำเร็จ`)
+        const json = await res.json()
 
-      if (!res.ok) throw new Error('ไม่สามารถโหลดข้อมูลได้')
-
-      const data: SummaryItem[] = await res.json()
-
-      const countMap: Record<string, number> = {}
-      data.forEach((item) => {
-        const match = item.question_key.match(/\d+/)
-        let title = item.question_key
-        if (match) {
-          const id = parseInt(match[0])
-          title = getTitle(id)
+        if (!Array.isArray(json.data)) {
+          console.error('Invalid API response:', json)
+          throw new Error(`API "${path}" ส่งข้อมูลผิดรูปแบบ`)
         }
-        countMap[title] = item.total
-      })
+
+        return json.data as SummaryItem[]
+      }
+
+      let countMap: Record<string, number> = {}
+
+      if (filterType === 'all') {
+        const [referral, formppk] = await Promise.all([
+          fetchSummary('/api/referral-guidances/summary'),
+          fetchSummary('/api/form-ppk/summary'),
+        ])
+
+        for (const item of [...referral, ...formppk]) {
+          const rawKey = item.question_key ?? item.question ?? 'ไม่ทราบอาการ'
+          const match = rawKey.match(/\d+/)
+          let title = rawKey
+          if (match) {
+            const id = parseInt(match[0])
+            title = getTitle(id)
+          }
+          countMap[title] = (countMap[title] || 0) + item.total
+        }
+      } else {
+        const apiPath =
+          filterType === 'referral' ? '/referral-guidances/summary' : '/form-ppk/summary'
+
+        const data = await fetchSummary(apiPath)
+
+        data.forEach((item) => {
+          const rawKey = item.question_key ?? item.question ?? 'ไม่ทราบอาการ'
+          const match = rawKey.match(/\d+/)
+          let title = rawKey
+          if (match) {
+            const id = parseInt(match[0])
+            title = getTitle(id)
+          }
+          countMap[title] = item.total
+        })
+      }
 
       setStats(countMap)
     } catch (err: any) {
@@ -113,18 +139,7 @@ export default function ReferralStatsDashboardPage() {
           </button>
         </div>
 
-        {loading && (
-          <div className={styles.statusBox}>
-            <motion.div
-              animate={{ rotate: 360 }}
-              transition={{ repeat: Infinity, duration: 1.5, ease: 'linear' }}
-              style={{ display: 'inline-block' }}
-            >
-              <Clock size={24} strokeWidth={1.5} />
-            </motion.div>
-            <span>กำลังโหลดข้อมูล...</span>
-          </div>
-        )}
+        {loading && <LoadingSpinner message="กำลังโหลดข้อมูล..." size={28} />}
 
         {error && (
           <div className={styles.statusBoxError}>

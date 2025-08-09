@@ -10,6 +10,13 @@ export interface Question20Result {
   note: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
+}
+
+interface Props {
+  onResult: (result: Question20Result | null) => void
+  type: string
 }
 
 const symptomOptions = [
@@ -21,14 +28,10 @@ const symptomOptions = [
   { value: 'no_pulse', label: 'คลำชีพจรส่วนปลายไม่ได้' },
 ]
 
-export default function Question20_CompartmentSyndrome({
-  onResult,
-}: {
-  onResult: (result: Question20Result) => void
-}) {
+export default function Question20_CompartmentSyndrome({ onResult, type }: Props) {
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([])
   const [additionalNote, setAdditionalNote] = useState('')
-  const hasSentInitial = useRef(false)
+  const prevKey = useRef<string>('')
 
   const handleCheckboxChange = (value: string) => {
     setSelectedSymptoms((prev) =>
@@ -45,51 +48,48 @@ export default function Question20_CompartmentSyndrome({
       const labels = symptomOptions
         .filter((opt) => selectedSymptoms.includes(opt.value))
         .map((opt) => opt.label)
-      noteParts.push(` ${labels.join(', ')}`)
+      noteParts.push(`อาการ: ${labels.join(', ')}`)
       symptoms.push(...selectedSymptoms)
     }
 
     if (additionalNote.trim()) {
-      noteParts.push(` ${additionalNote.trim()}`)
+      noteParts.push(`เพิ่มเติม: ${additionalNote.trim()}`)
       symptoms.push('custom_note')
     }
 
-    const note = noteParts.length > 0 ? noteParts.join(' | ') : 'สงสัย Compartment Syndrome'
+    const note = noteParts.length > 0 ? noteParts.join(' | ') : 'สงสัย Compartment Syndrome (ส่ง ER ด่วน)'
+    const resultKey = JSON.stringify({ note, symptoms })
 
-    onResult({
-      question: 'CompartmentSyndrome',
-      question_code: 20,
-      question_title: 'ภาวะ Compartment Syndrome ',
-      clinic: ['er'],
-      note,
-      symptoms,
-      isReferCase: true,
-    })
-  }, [selectedSymptoms, additionalNote])
+    if (prevKey.current !== resultKey) {
+      prevKey.current = resultKey
 
-  useEffect(() => {
-    if (!hasSentInitial.current) {
+      if (symptoms.length === 1 && !additionalNote.trim()) {
+        onResult(null)
+        return
+      }
+
       onResult({
         question: 'CompartmentSyndrome',
         question_code: 20,
-        question_title: 'ภาวะ Compartment Syndrome (ส่ง ER ด่วน)',
+        question_title: 'ภาวะ Compartment Syndrome',
         clinic: ['er'],
-        note: 'สงสัย Compartment Syndrome',
-        symptoms: ['compartment_syndrome'],
+        note,
+        symptoms,
         isReferCase: true,
+        routedBy: 'auto',
+        type,
       })
-      hasSentInitial.current = true
     }
-  }, [])
+  }, [selectedSymptoms, additionalNote, type, onResult])
 
   return (
     <div className="space-y-4 text-sm text-gray-800">
       <p>
-        ภาวะ Compartment Syndrome: ปวด บวม ชา ซีด เย็น คลำชีพจรปลายไม่ได้
+        ภาวะ Compartment Syndrome: ปวด บวม ชา ซีด เย็น คลำชีพจรปลายไม่ได้ (ส่ง ER ด่วน)
       </p>
 
       <div className="space-y-2">
-        <p className="font-medium">อาการที่พบ (เลือกได้หลายข้อ):</p>
+        <p className="font-medium">อาการที่พบ (เลือกได้หลายข้อ)</p>
         {symptomOptions.map((opt) => (
           <label key={opt.value} className="flex items-center gap-2">
             <input
@@ -108,6 +108,7 @@ export default function Question20_CompartmentSyndrome({
         </label>
         <textarea
           id="note"
+          title="หมายเหตุเพิ่มเติม"
           className="w-full border border-gray-300 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
           rows={2}
           placeholder="เช่น ตำแหน่งที่เป็น, ลักษณะบวม หรือคำอธิบายเพิ่มเติม"

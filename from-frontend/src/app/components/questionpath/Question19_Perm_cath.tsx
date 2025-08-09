@@ -11,67 +11,71 @@ export interface Question19Result {
   note: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
 }
 
 interface Props {
-  onResult: (result: Question19Result) => void
+  onResult: (result: Question19Result | null) => void
+  type: string
 }
 
-export default function Question19_PermCath({ onResult }: Props) {
+export default function Question19_PermCath({ onResult, type }: Props) {
   const [note, setNote] = useState('')
-  const hasSentInitial = useRef(false)
+  const prevKey = useRef<string>('')
+
   const todayName = getThaiDayName()
 
-  const baseResult = {
-    question: 'PermCathFollowup',
-    question_code: 19,
-    question_title: 'แผลจากการใส่ Perm-Cath',
-    clinic: ['med'],
-    isReferCase: false,
-  }
-
-  const emitResult = (text: string) => {
-    const trimmedNote = text.trim()
+  useEffect(() => {
+    const trimmedNote = note.trim()
     const symptoms: string[] = ['perm_cath_wound']
+    if (trimmedNote) symptoms.push('custom_note')
 
     const finalNote = trimmedNote || 'ติดตามแผล Perm-Cath'
-    onResult({
-      ...baseResult,
-      note: finalNote,
-      symptoms,
-    })
-  }
+    const clinic = ['med']
+    const isReferCase = true
 
-  useEffect(() => {
-    if (!hasSentInitial.current) {
-      emitResult(note)
-      hasSentInitial.current = true
+    const resultKey = JSON.stringify({ finalNote, clinic, symptoms, isReferCase })
+
+    if (prevKey.current !== resultKey) {
+      prevKey.current = resultKey
+
+      if (!trimmedNote && symptoms.length <= 1) {
+        onResult(null)
+        return
+      }
+
+      onResult({
+        question: 'PermCathFollowup',
+        question_code: 19,
+        question_title: 'แผลจากการใส่ Perm-Cath',
+        clinic,
+        note: finalNote,
+        symptoms,
+        isReferCase,
+        routedBy: 'auto',
+        type,
+      })
     }
-  }, [])
-
-  const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value
-    setNote(value)
-    emitResult(value)
-  }
+  }, [note, onResult, type])
 
   return (
     <div className="flex flex-col gap-2 text-sm text-gray-800">
       <p className="text-gray-700 leading-relaxed">
-        แผลที่เกิดจากการผ่าตัดเส้นเลือดเพื่อทำการล้างไต (AVF - arteriovenous fistula)
+        แผลจากการใส่สาย Perm-Cath สำหรับฟอกไต (ติดตามอาการ เช่น บวม แดง ติดเชื้อ)
       </p>
 
       <label htmlFor="note" className="block font-medium mt-2 mb-1">
-        หมายเหตุเพิ่มเติม (ถ้ามี):
+        หมายเหตุเพิ่มเติม (ถ้ามี)
       </label>
       <textarea
         id="note"
         title="บันทึกหมายเหตุเพิ่มเติม"
         className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
         rows={2}
-        placeholder="บันทึกรายละเอียดเพิ่มเติม เช่น ลักษณะแผล, เคยมีอาการมาก่อน ฯลฯ"
+        placeholder="ระบุลักษณะแผล, ตำแหน่ง, อาการ ฯลฯ"
         value={note}
-        onChange={handleChange}
+        onChange={(e) => setNote(e.target.value)}
       />
     </div>
   )

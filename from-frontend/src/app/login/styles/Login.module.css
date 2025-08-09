@@ -42,9 +42,9 @@
   width: 450px;
   display: flex;
   flex-direction: column;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: 0px;
+  background: rgba(255, 255, 255, 0.8); /* โปร่งแสงพอดี */
+  backdrop-filter: blur(4px); /* ลด blur ให้ซอฟต์ลง */
+  -webkit-backdrop-filter: blur(4px); /* Safari รองรับ */
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
   border-radius: 16px;
   padding: 40px;
@@ -55,6 +55,8 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  justify-content: center; /* ทำให้ทุก state อยู่กลาง */
+  min-height: 400px; /* ให้ความสูงเท่ากันทุก state */
 }
 
 .logoWrapper {
@@ -166,30 +168,6 @@
   line-height: 1.6;
 }
 
-/* Responsive: มือถือ */
-@media (max-width: 768px) {
-  .loginCard {
-    flex-direction: column;
-    width: 90%;
-  }
-
-  .left, .right {
-    padding: 24px;
-  }
-
-  .loginHeader {
-    font-size: 20px;
-  }
-
-  .right h2 {
-    font-size: 20px;
-  }
-
-  .right p {
-    font-size: 15px;
-  }
-}
-
 .successContainer {
   display: flex;
   flex-direction: column;
@@ -227,16 +205,145 @@
   z-index: 9998;
   background: transparent;
   pointer-events: all;
-  user-select: none; /* ❌ ห้าม select ข้อความ */
+  user-select: none; 
   -webkit-user-select: none;
 }
 
 /* กล่อง Login ที่ใช้ได้ */
-.loginBox {
-  position: relative;
-  z-index: 9999;
-  pointer-events: auto;
-  user-select: auto;
-  -webkit-user-select: none;
+.loadingBox {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 500px;
+  padding: 40px;
+  background-color: white;
+  border-radius: 12px;
+  box-shadow: 0 0 20px rgba(0, 0, 0, 0.08);
 }
 
+.loader {
+  width: 40px;
+  height: 40px;
+  border: 4px solid #e5e7eb;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  margin-top: 20px;
+}
+
+.loadingText {
+  margin-top: 16px;
+  font-size: 1rem;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+@media (max-width: 600px) {
+  .loginCard {
+    width: 100%;
+    margin: 0 1rem;
+    padding: 24px;
+  }
+
+  .loginHeader {
+    font-size: 18px;
+    margin-bottom: 24px;
+  }
+
+  .inputGroup input {
+    font-size: 0.95rem;
+    padding: 0.55rem 2.2rem 0.55rem 2rem;
+  }
+
+  .left button {
+    font-size: 15px;
+    padding: 10px;
+  }
+
+  .successContainer {
+    padding: 1.5rem;
+  }
+
+  .successMessage {
+    font-size: 1.2rem;
+  }
+
+  .successSubtext {
+    font-size: 0.9rem;
+  }
+
+  .loadingBox {
+    min-height: 400px;
+    padding: 24px;
+  }
+
+  .loader {
+    width: 32px;
+    height: 32px;
+    border-width: 3px;
+  }
+
+  .loadingText {
+    font-size: 0.95rem;
+  }
+}
+
+@media (min-width: 601px) and (max-width: 900px) {
+  .loginCard {
+    width: 90%;
+    padding: 32px;
+  }
+
+  .loginHeader {
+    font-size: 20px;
+  }
+
+  .inputGroup input {
+    font-size: 1rem;
+  }
+
+  .left button {
+    font-size: 15px;
+  }
+
+  .loadingBox {
+    min-height: 450px;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1200px) {
+  .loginCard {
+    width: 420px;
+  }
+
+  .loginHeader {
+    font-size: 21px;
+  }
+
+  .inputGroup input {
+    font-size: 1rem;
+  }
+
+  .left button {
+    font-size: 15.5px;
+  }
+}
+
+.registerLinkWrapper {
+  margin-top: 0.75rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #475569;
+}
+
+.registerLink {
+  margin-left: 6px;
+  color: #2563eb;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.registerLink:hover {
+  color: #1d4ed8;
+  text-decoration: underline;
+}

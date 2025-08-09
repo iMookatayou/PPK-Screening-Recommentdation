@@ -1,57 +1,61 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { getThaiDayName } from '@/lib/dateUtils'
 
 export interface Question24Result {
   question: string
   question_code: number
   question_title: string
   clinic: string[]
-  note?: string
+  note: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
 }
 
 interface Props {
-  onResult: (data: Question24Result) => void
+  onResult: (data: Question24Result | null) => void
+  type: string
 }
 
-export default function Question24_RetainForeignBody({ onResult }: Props) {
+export default function Question24_RetainForeignBody({ onResult, type }: Props) {
   const [risk, setRisk] = useState(false)
   const [note, setNote] = useState('')
-  const hasSentRef = useRef(false)
-  const todayName = getThaiDayName()
-
-  const emitResult = (noteText: string, isRisk: boolean) => {
-    const clinic = isRisk ? ['surg'] : ['er']
-    const finalNote = isRisk
-      ? `รอตรวจ OPD ศัลย์${noteText.trim() ? ' - ' + noteText.trim() : ''}`
-      : noteText.trim() || 'สงสัยวัตถุปักคาในร่างกาย'
-
-    onResult({
-      question: 'RetainForeignBody',
-      question_code: 24,
-      question_title: 'สงสัยวัตถุปักคาในร่างกาย',
-      clinic,
-      note: finalNote,
-      symptoms: ['retained_foreign_body'],
-      isReferCase: true,
-    })
-  }
+  const prevKey = useRef('')
 
   useEffect(() => {
-    if (!hasSentRef.current) {
-      emitResult(note, risk)
-      hasSentRef.current = true
-    }
-  }, [])
+    const symptoms = ['retained_foreign_body']
+    const clinic = risk ? ['surg'] : ['er']
 
-  useEffect(() => {
-    if (hasSentRef.current) {
-      emitResult(note, risk)
+    const trimmedNote = note.trim()
+    const finalNote = risk
+      ? `รอตรวจ OPD ศัลย์${trimmedNote ? ' - ' + trimmedNote : ''}`
+      : trimmedNote || 'สงสัยวัตถุปักคาในร่างกาย'
+
+    const key = JSON.stringify({ clinic, finalNote, symptoms })
+
+    if (prevKey.current !== key) {
+      prevKey.current = key
+
+      if (!finalNote.trim()) {
+        onResult(null)
+        return
+      }
+
+      onResult({
+        question: 'RetainForeignBody',
+        question_code: 24,
+        question_title: 'สงสัยวัตถุปักคาในร่างกาย',
+        clinic,
+        note: finalNote,
+        symptoms,
+        isReferCase: true,
+        routedBy: 'auto',
+        type
+      })
     }
-  }, [note, risk])
+  }, [risk, note, type, onResult])
 
   return (
     <div className="flex flex-col gap-2 text-sm">
@@ -77,6 +81,7 @@ export default function Question24_RetainForeignBody({ onResult }: Props) {
       </label>
       <textarea
         id="note"
+        title="หมายเหตุเพิ่มเติม"
         className="w-full border border-gray-300 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
         rows={2}
         placeholder="บันทึกรายละเอียดเพิ่มเติม เช่น ตำแหน่งวัตถุที่ปักอยู่"

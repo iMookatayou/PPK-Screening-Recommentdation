@@ -1,20 +1,24 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import ClientLayout from './ClientLayout'
 
 export default function AppLayoutWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
+  const [isClient, setIsClient] = useState(false)
 
-  // path ที่ไม่ต้องการให้มี Navbar/Sidebar
+  useEffect(() => {
+    setIsClient(true)
+
+  }, [])
+
+  if (!isClient) return null
+
   const standalonePaths = ['/dashboard', '/printsummary']
   const isStandalone = standalonePaths.some((p) => pathname.startsWith(p))
 
-  if (isStandalone) {
-    // หน้า standalone → แสดง children ตรง ๆ
-    return <>{children}</>
-  }
+  if (isStandalone) return <>{children}</>
 
-  // หน้าอื่น → ใช้ ClientLayout (AuthProvider อยู่แล้วใน RootLayout)
   return <ClientLayout>{children}</ClientLayout>
 }

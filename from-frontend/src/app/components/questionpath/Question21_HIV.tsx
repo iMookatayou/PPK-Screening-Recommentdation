@@ -1,56 +1,60 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { getThaiDayName } from '@/lib/dateUtils'
 
 export interface Question21Result {
   question: string
   question_code: number
   question_title: string
   clinic: string[]
-  note?: string
+  note: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
 }
 
 interface Question21_HIVProps {
-  onResult: (result: Question21Result) => void
+  onResult: (result: Question21Result | null) => void
+  type: string
 }
 
-export default function Question21_HIV({ onResult }: Question21_HIVProps) {
+export default function Question21_HIV({ onResult, type }: Question21_HIVProps) {
   const [note, setNote] = useState('')
-  const hasSent = useRef(false)
-  const todayName = getThaiDayName()
-  
-  const emitResult = (text: string) => {
-    const trimmed = text.trim()
-    const symptoms = ['hiv_exposure']
+  const prevKey = useRef('')
+
+  useEffect(() => {
+    const baseSymptoms = ['hiv_exposure']
+    const symptoms = [...baseSymptoms]
+    const trimmed = note.trim()
+    const noteText = trimmed ? `รายละเอียดเพิ่มเติม: ${trimmed}` : 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV'
+
     if (trimmed) symptoms.push('custom_note')
 
-    onResult({
-      question: 'HIVExposure',
-      question_code: 21,
-      question_title: 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV',
-      clinic: ['er'],
-      note: trimmed || 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV',
-      symptoms,
-      isReferCase: true,
-    })
-  }
+    const currentKey = JSON.stringify({ note: noteText, symptoms })
 
-  useEffect(() => {
-    if (!hasSent.current) {
-      emitResult(note)
-      hasSent.current = true
-    }
-  }, [])
+    if (prevKey.current !== currentKey) {
+      prevKey.current = currentKey
 
-  useEffect(() => {
-    if (hasSent.current) {
-      emitResult(note)
+      if (!trimmed) {
+        onResult(null)
+        return
+      }
+
+      onResult({
+        question: 'HIVExposure',
+        question_code: 21,
+        question_title: 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV',
+        clinic: ['er'],
+        note: noteText,
+        symptoms,
+        isReferCase: true,
+        routedBy: 'auto',
+        type,
+      })
     }
-  }, [note])
-  
+  }, [note, type, onResult])
+
   return (
     <div className="flex flex-col gap-2 text-sm">
       <p className="text-gray-700 leading-relaxed">
@@ -63,6 +67,7 @@ export default function Question21_HIV({ onResult }: Question21_HIVProps) {
       <input
         id="note"
         type="text"
+        title="รายละเอียดเพิ่มเติม"
         value={note}
         onChange={(e) => setNote(e.target.value)}
         placeholder="ระบุประวัติเสี่ยงหรือรายละเอียด"

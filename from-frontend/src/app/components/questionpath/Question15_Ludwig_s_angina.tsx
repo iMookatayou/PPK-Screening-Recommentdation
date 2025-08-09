@@ -14,13 +14,16 @@ export interface Question16Result {
   isServiceAvailableToday: boolean
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
 }
 
 type Props = {
-  onResult: (data: Question16Result) => void
+  onResult: (data: Question16Result | null) => void
+  type: string
 }
 
-export default function Question16_Keloid({ onResult }: Props) {
+export default function Question16_Keloid({ onResult, type }: Props) {
   const [shownPopup, setShownPopup] = useState(false)
   const [popupOpen, setPopupOpen] = useState(false)
   const [extraNote, setExtraNote] = useState('')
@@ -54,6 +57,8 @@ export default function Question16_Keloid({ onResult }: Props) {
       isServiceAvailableToday: allow,
       symptoms,
       isReferCase: false,
+      routedBy: 'auto',
+      type,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allow, thaiDay, extraNote])
@@ -88,6 +93,7 @@ export default function Question16_Keloid({ onResult }: Props) {
           rows={2}
           placeholder="ระบุรายละเอียดเพิ่มเติม เช่น สภาพแผลเป็นล่าสุด"
           className="w-full border border-gray-300 rounded px-3 py-2"
+          title="หมายเหตุเพิ่มเติม"
         />
       </div>
 

@@ -12,27 +12,31 @@ export interface Question12Result {
   note?: string
   isReferCase: boolean
   symptoms: string[]
+  type: string
 }
 
 interface Question12Props {
   onResult: (result: Question12Result | null) => void
   isANC?: boolean
+  type: string
 }
 
 export default function Question12_Pregnancy({
   onResult,
   isANC = false,
+  type,
 }: Question12Props) {
   const [gestWeek, setGestWeek] = useState<number | ''>('')
   const [symptom, setSymptom] = useState<string>('')
   const [extraNote, setExtraNote] = useState<string>('')
-  const [painScale, setPainScale] = useState<number | null>(null)
+  const [painScale, setPainScale] = useState<number>(3)
 
   const [isManualRefer, setIsManualRefer] = useState<boolean>(false)
   const [showPopup, setShowPopup] = useState(false)
   const [showManualReferPopup, setShowManualReferPopup] = useState(false)
 
   const shownPopupOnceRef = useRef(false)
+  const prevKeyRef = useRef('')
   const [hasTouched, setHasTouched] = useState(false)
 
   useEffect(() => {
@@ -48,68 +52,73 @@ export default function Question12_Pregnancy({
     const symptoms = ['pregnancy', symptom]
 
     if (gestWeek !== '') noteParts.push(`อายุครรภ์: ${week} สัปดาห์`)
-    if (painScale !== null && symptom === 'appendicitis') {
+
+    if (symptom === 'appendicitis') {
       noteParts.push(`ระดับความเจ็บปวด: ${painScale}/10`)
     }
 
-    if (symptom === 'pain_pregnancy') {
-      if (week >= 22) {
+    switch (symptom) {
+      case 'pain_pregnancy':
+        if (week >= 22) {
+          clinic = 'lr'
+          noteParts.push(`ปวดครรภ์ ≥ ${week} สัปดาห์`)
+          symptoms.push('gest_22_up')
+          isReferCase = true
+          if (!shownPopupOnceRef.current) {
+            setShowPopup(true)
+            shownPopupOnceRef.current = true
+          }
+        } else {
+          clinic = 'anc'
+          noteParts.push(`ปวดครรภ์ < ${week} สัปดาห์`)
+          symptoms.push('gest_under_22')
+          shownPopupOnceRef.current = false
+        }
+        break
+      case 'ectopic':
+        clinic = 'obgy'
+        noteParts.push('สงสัย Ectopic pregnancy (VS stable)')
+        isReferCase = true
+        break
+      case 'bleeding_abortion':
+        clinic = 'obgy'
+        noteParts.push('Bleeding per vagina R/O abortion (VS stable)')
+        isReferCase = true
+        break
+      case 'preeclampsia':
         clinic = 'lr'
-        noteParts.push(`ปวดครรภ์ ≥ ${week} สัปดาห์`)
-        symptoms.push('gest_22_up')
+        noteParts.push('Preeclampsia (BP ≥ 140/90 + อาการแทรกซ้อน)')
         isReferCase = true
         if (!shownPopupOnceRef.current) {
           setShowPopup(true)
           shownPopupOnceRef.current = true
         }
-      } else {
-        clinic = 'anc'
-        noteParts.push(`ปวดครรภ์ < ${week} สัปดาห์`)
-        symptoms.push('gest_under_22')
-        shownPopupOnceRef.current = false
-      }
-    } else if (symptom === 'ectopic') {
-      clinic = 'obgy'
-      noteParts.push('สงสัย Ectopic pregnancy (VS stable)')
-      isReferCase = true
-      shownPopupOnceRef.current = false
-    } else if (symptom === 'bleeding_abortion') {
-      clinic = 'obgy'
-      noteParts.push('Bleeding per vagina R/O abortion (VS stable)')
-      isReferCase = true
-      shownPopupOnceRef.current = false
-    } else if (symptom === 'preeclampsia') {
-      clinic = 'lr'
-      noteParts.push('Preeclampsia (BP ≥ 140/90 + อาการแทรกซ้อน)')
-      isReferCase = true
-      if (!shownPopupOnceRef.current) {
-        setShowPopup(true)
-        shownPopupOnceRef.current = true
-      }
-    } else if (symptom === 'appendicitis') {
-      if (painScale === null) {
-        onResult(null)
-        return
-      }
-      clinic = 'er'
-      noteParts.push('ปวดท้องสงสัยไส้ติ่ง')
-      symptoms.push('appendicitis')
-      isReferCase = true
-    } else if (symptom === 'uti_etc') {
-      if (isANC) {
-        clinic = 'anc'
-        noteParts.push('ANC เดิม มีอาการไม่รุนแรง (UTI, URI, dyspepsia)')
-        symptoms.push('has_anc')
-      } else {
-        clinic = 'obgy'
-        noteParts.push('หญิงตั้งครรภ์ไม่มี ANC เดิม ส่งนรีเวช')
-        symptoms.push('no_anc')
-      }
-      shownPopupOnceRef.current = false
+        break
+      case 'appendicitis':
+        clinic = 'er'
+        noteParts.push('ปวดท้องสงสัยไส้ติ่ง')
+        symptoms.push('appendicitis')
+        isReferCase = true
+        break
+      case 'uti_etc':
+        if (isANC) {
+          clinic = 'anc'
+          noteParts.push('ANC เดิม มีอาการไม่รุนแรง (UTI, URI, dyspepsia)')
+          symptoms.push('has_anc')
+        } else {
+          clinic = 'obgy'
+          noteParts.push('หญิงตั้งครรภ์ไม่มี ANC เดิม ส่งนรีเวช')
+          symptoms.push('no_anc')
+        }
+        break
     }
-
+    
     if (isManualRefer) {
       isReferCase = true
+      if (!clinic) {
+        clinic = 'obgy'
+        noteParts.push('เลือก Refer manual: ส่งนรีเวช')
+      }
     }
 
     if (extraNote.trim()) {
@@ -121,16 +130,23 @@ export default function Question12_Pregnancy({
       return
     }
 
-    onResult({
-      question: 'PregnancyCase',
-      question_code: 12,
-      question_title: 'หญิงตั้งครรภ์ที่มีอาการ',
-      clinic: [clinic],
-      note: noteParts.join(' | '),
-      isReferCase,
-      symptoms,
-    })
-  }, [gestWeek, symptom, extraNote, isManualRefer, painScale])
+    const note = noteParts.join(' | ')
+    const key = `${symptom}-${week}-${painScale}-${extraNote}-${isManualRefer}`
+
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResult({
+        question: 'PregnancyCase',
+        question_code: 12,
+        question_title: 'หญิงตั้งครรภ์ที่มีอาการ',
+        clinic: [clinic],
+        note,
+        isReferCase,
+        symptoms,
+        type,
+      })
+    }
+  }, [gestWeek, symptom, extraNote, isManualRefer, painScale, type])
 
   return (
     <div className="space-y-4 text-sm">
@@ -160,7 +176,7 @@ export default function Question12_Pregnancy({
             setSymptom(e.target.value)
             setHasTouched(true)
             shownPopupOnceRef.current = false
-            setPainScale(null)
+            setPainScale(3)
           }}
         >
           <option value="">-- โปรดเลือกอาการ --</option>
@@ -184,7 +200,7 @@ export default function Question12_Pregnancy({
             min={1}
             max={7}
             step={1}
-            value={painScale ?? 3}
+            value={painScale}
             onChange={(e) => setPainScale(Number(e.target.value))}
             className="w-full"
           />
@@ -194,7 +210,7 @@ export default function Question12_Pregnancy({
             ))}
           </div>
           <div className="text-center text-sm text-gray-700 mt-1">
-            ระดับ: <strong>{painScale ?? 3}</strong>
+            ระดับ: <strong>{painScale}</strong>
           </div>
         </div>
       )}

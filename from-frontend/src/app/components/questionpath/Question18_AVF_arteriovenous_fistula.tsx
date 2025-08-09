@@ -7,58 +7,59 @@ export interface Question18Result {
   question_code: number
   question_title: string
   clinic: string[]
-  note?: string
+  note: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
 }
 
 interface Props {
-  onResult: (data: Question18Result) => void
+  onResult: (data: Question18Result | null) => void
+  type: string
 }
 
-export default function Question18_AVFWound({ onResult }: Props) {
+export default function Question18_AVFWound({ onResult, type }: Props) {
   const [extraNote, setExtraNote] = useState('')
-  const hasEmittedRef = useRef(false)
+  const prevKeyRef = useRef<string>('')
 
-  const questionResultBase = {
-    question: 'AVFWoundFollowup',
-    question_code: 18,
-    question_title: 'แผลจากการทำ AVF (สำหรับผู้ป่วยล้างไต)',
-    clinic: ['surg'],
-    isReferCase: false,
-  }
+  useEffect(() => {
+    const trimmedNote = extraNote.trim()
 
-  // ฟังก์ชันสำหรับส่งผลลัพธ์กลับ
-  const emitResult = (noteText: string) => {
-    const trimmedNote = noteText.trim()
     const symptoms = ['avf_wound']
     if (trimmedNote) symptoms.push('custom_note')
 
-    onResult({
-      ...questionResultBase,
-      note: trimmedNote || 'ติดตามแผล AVF',
-      symptoms,
-    })
-  }
+    const note = trimmedNote || 'ติดตามแผล AVF'
+    const isReferCase = true
+    const clinic = ['surg']
 
-  // เรียกส่งผลลัพธ์ตอนเริ่มต้นครั้งเดียว
-  useEffect(() => {
-    if (!hasEmittedRef.current) {
-      emitResult('')
-      hasEmittedRef.current = true
+    const resultKey = JSON.stringify({ note, clinic, symptoms, isReferCase })
+
+    if (prevKeyRef.current !== resultKey) {
+      prevKeyRef.current = resultKey
+
+      if (!trimmedNote && symptoms.length <= 1) {
+        onResult(null)
+        return
+      }
+
+      onResult({
+        question: 'AVFWoundFollowup',
+        question_code: 18,
+        question_title: 'แผลจากการทำ AVF (สำหรับผู้ป่วยล้างไต)',
+        clinic,
+        note,
+        symptoms,
+        isReferCase,
+        routedBy: 'auto',
+        type,
+      })
     }
-  }, [])
-
-  // Handler เปลี่ยนแปลงหมายเหตุเพิ่มเติม
-  const handleNoteChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value
-    setExtraNote(val)
-    emitResult(val)
-  }
+  }, [extraNote, onResult, type])
 
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-gray-700 leading-relaxed">
+    <div className="space-y-4 text-sm text-gray-800">
+      <p className="leading-relaxed">
         แผลที่เกิดจากการผ่าตัดเส้นเลือดเพื่อทำการล้างไต (AVF - arteriovenous fistula)
       </p>
 
@@ -68,10 +69,11 @@ export default function Question18_AVFWound({ onResult }: Props) {
         </label>
         <textarea
           id="extraNote"
+          title="หมายเหตุเพิ่มเติม"
           className="w-full border px-3 py-2 rounded"
           rows={2}
           value={extraNote}
-          onChange={handleNoteChange}
+          onChange={(e) => setExtraNote(e.target.value)}
           placeholder="ระบุรายละเอียดเพิ่มเติม เช่น แผลติดเชื้อ, บวม, ปวดแผล"
         />
       </div>

@@ -28,13 +28,14 @@
   color: #4b5563;
 }
 
-/* กล่องเลือกหัวข้อ + ปุ่มล้าง (แถวเดียวกัน) */
+/* แถว Select + ปุ่มล้าง */
 .formppk-question-select-row {
   display: flex;
   align-items: flex-end;
   justify-content: space-between;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  flex-wrap: wrap;
 }
 
 .formppk-question-select-box {
@@ -49,34 +50,36 @@
   display: block;
 }
 
-/* ปุ่มล้างข้อมูล */
+/* ปุ่มล้าง */
 .formppk-btn-clear {
-  background-color: #e11d48;
-  color: #fff;
-  font-weight: 600;
+  background-color: #f3f4f6; /* เทาอ่อน */
+  color: #1f2937; /* เทาเข้ม */
+  font-weight: 500;
   font-size: 0.95rem;
   padding: 0.65rem 1.4rem;
-  border: none;
+  border: 1px solid #d1d5db; /* ขอบเทาอ่อน */
   border-radius: 6px;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  box-shadow: 0 2px 6px rgba(225, 29, 72, 0.3);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+  justify-content: center;
 }
 
 .formppk-btn-clear:hover {
-  background-color: #be123c;
+  background-color: #e5e7eb; /* เทา hover */
   transform: translateY(-1px);
 }
 
 .formppk-btn-clear-icon {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
+  color: #374151; /* ไอคอนสีเทาเข้ม */
 }
 
-/* กล่องคำถามทั้งหมด (grid) */
+/* กล่องคำถาม */
 .formppk-questions-container {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
@@ -84,18 +87,17 @@
   align-items: stretch;
 }
 
-/* กล่องคำถามแต่ละข้อ */
 .formppk-question-box {
   background-color: #f9fafb;
   border: 1px solid #d1d5db;
   border-radius: 6px;
   padding: 1.25rem 1.5rem;
-  height: 100%;
   display: flex;
   flex-direction: column;
+  height: 100%;
   justify-content: space-between;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.03);
-  transition: background 0.3s ease, box-shadow 0.3s ease;
+  transition: background 0.3s ease;
 }
 
 .formppk-question-box:hover {
@@ -118,7 +120,7 @@
   gap: 0.75rem;
 }
 
-/* input, select, textarea */
+/* input, textarea, select */
 .formppk-question-box input[type="text"],
 .formppk-question-box textarea,
 .formppk-question-box select {
@@ -138,7 +140,7 @@
   outline: none;
 }
 
-/* label, checkbox */
+/* checkbox */
 .formppk-question-box label {
   font-size: 0.95rem;
   color: #374151;
@@ -223,21 +225,20 @@
   cursor: pointer;
   transition: background-color 0.2s ease, transform 0.2s ease;
 }
-
 .formppk-btn-confirm:hover {
   background-color: #1d4ed8;
   transform: translateY(-1px);
 }
 
-/* Responsive: มือถือ / Tablet */
-@media (max-width: 900px) {
+/* ------------------ Mobile ≤767px ------------------ */
+@media (max-width: 767px) {
   .formppk-wrapper {
-    padding: 1.5rem 1rem;
+    padding: 1.2rem 0.75rem;
     margin: 1rem;
   }
 
   .formppk-title {
-    font-size: 1.6rem;
+    font-size: 1.5rem;
   }
 
   .formppk-questions-container {
@@ -250,8 +251,65 @@
   }
 
   .formppk-btn-clear {
+  background-color: #f3f4f6; /* เทาอ่อน */
+  color: #1f2937;            /* เทาเข้ม */
+  font-weight: 500;
+  font-size: 0.95rem;
+  padding: 0.55rem 1.25rem;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+
+.formppk-btn-clear:hover {
+  background-color: #e5e7eb;
+  transform: translateY(-1px);
+}
+
+.formppk-btn-clear-icon {
+  width: 16px;
+  height: 16px;
+}
+
+  .formppk-btn-confirm {
     width: 100%;
-    justify-content: center;
+    font-size: 0.9rem;
+    padding: 0.6rem 1.2rem;
+  }
+
+  .formppk-referral-title {
+    font-size: 0.95rem;
+  }
+
+  .formppk-referral-item {
+    font-size: 0.9rem;
   }
 }
 
+/* ------------------ Tablet (768px–1024px) ------------------ */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .formppk-wrapper {
+    padding: 2rem 1.5rem;
+    margin: 1.5rem auto;
+  }
+
+  .formppk-title {
+    font-size: 1.9rem;
+  }
+
+  .formppk-questions-container {
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .formppk-btn-clear,
+  .formppk-btn-confirm {
+    font-size: 0.95rem;
+    padding: 0.6rem 1.4rem;
+  }
+}

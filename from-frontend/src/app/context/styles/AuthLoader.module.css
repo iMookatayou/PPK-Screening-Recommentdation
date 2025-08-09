@@ -1,0 +1,15 @@
+/* styles/AuthLoader.module.css */
+.loaderWrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  background: white;
+}
+
+.loaderText {
+  font-size: 1.25rem;
+  margin-top: 1.5rem;
+  color: #333;
+}

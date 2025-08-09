@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface Question11Result {
   question: string
@@ -11,18 +11,27 @@ interface Question11Result {
   symptoms: string[]
   isReferCase: boolean
   routedBy: 'auto'
+  type: string
 }
 
 interface Question11Props {
-  onResult: (result: Question11Result) => void
+  onResult: (result: Question11Result | null) => void
+  type: string
 }
 
-export default function Question11_OSCC({ onResult }: Question11Props) {
+export default function Question11_OSCC({ onResult, type }: Question11Props) {
   const [injuryStatus, setInjuryStatus] = useState<'hasInjury' | 'noInjury' | ''>('')
   const [extraNote, setExtraNote] = useState('')
+  const prevKeyRef = useRef('')
 
   useEffect(() => {
-    if (!injuryStatus) return
+    if (!injuryStatus) {
+      if (prevKeyRef.current !== 'null') {
+        prevKeyRef.current = 'null'
+        onResult(null)
+      }
+      return
+    }
 
     let clinic = ''
     const symptoms = ['oscc_case']
@@ -31,13 +40,13 @@ export default function Question11_OSCC({ onResult }: Question11Props) {
 
     if (injuryStatus === 'hasInjury') {
       clinic = 'er'
-      noteParts.push('มีการบาดเจ็บต่อร่างกาย หรือมีบาดแผล')
       symptoms.push('injury')
+      noteParts.push('มีการบาดเจ็บต่อร่างกาย หรือมีบาดแผล')
       isReferCase = true
     } else if (injuryStatus === 'noInjury') {
       clinic = 'nite'
-      noteParts.push('ไม่มีการบาดเจ็บต่อร่างกาย')
       symptoms.push('no_injury')
+      noteParts.push('ไม่มีการบาดเจ็บต่อร่างกาย')
     }
 
     if (extraNote.trim()) {
@@ -45,18 +54,23 @@ export default function Question11_OSCC({ onResult }: Question11Props) {
     }
 
     const note = noteParts.join(' | ')
+    const key = `${injuryStatus}-${extraNote.trim()}`
 
-    onResult({
-      question: 'OSCC',
-      question_code: 11,
-      question_title: 'ผู้ป่วย OSCC (ความรุนแรงทางร่างกาย/จิตใจ)',
-      clinic: [clinic],
-      note,
-      symptoms,
-      isReferCase,
-      routedBy: 'auto',
-    })
-  }, [injuryStatus, extraNote])
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResult({
+        question: 'OSCC',
+        question_code: 11,
+        question_title: 'ผู้ป่วย OSCC (ความรุนแรงทางร่างกาย/จิตใจ)',
+        clinic: [clinic],
+        note,
+        symptoms,
+        isReferCase,
+        routedBy: 'auto',
+        type,
+      })
+    }
+  }, [injuryStatus, extraNote, type, onResult])
 
   return (
     <div className="space-y-4 text-sm text-gray-800">

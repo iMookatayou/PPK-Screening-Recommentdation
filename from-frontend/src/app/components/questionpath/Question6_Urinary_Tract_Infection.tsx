@@ -12,16 +12,19 @@ export interface Question6Result {
   note?: string
   symptoms: string[]
   isReferCase: boolean
+  type: string
 }
 
 interface Question6Props {
   frontAgentGender?: '1' | '2'
   onResult: (result: Question6Result | null) => void
+  type: string
 }
 
 export default function Question6_UTI({
   frontAgentGender = '1',
   onResult,
+  type,
 }: Question6Props) {
   const [gender, setGender] = useState<'1' | '2' | '3'>(frontAgentGender)
   const [hasProstateIssue, setHasProstateIssue] = useState(false)
@@ -30,44 +33,64 @@ export default function Question6_UTI({
   const [extraNote, setExtraNote] = useState('')
   const prevKeyRef = useRef('')
 
-  const clinicOptions = Object.entries(clinicLabelMap).map(([value, label]) => ({
-    value,
-    label,
-  }))
+  // เวลาไทย
+  const now = new Date()
+  const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
+  const thaiDay = bangkokTime.getDay() // 0=Sun, ..., 2=Tue, 4=Thu
+  const hour = bangkokTime.getHours()
+
+  const isTuesdayOrThursdayMorning = (thaiDay === 2 || thaiDay === 4) && hour >= 8 && hour < 12
+
+  // ตัวเลือก clinic สำหรับกรณีเพศไม่ระบุ
+  const clinicOptions = [
+    { value: 'surg', label: clinicLabelMap['surg'] },
+    { value: 'muang', label: clinicLabelMap['muang'] },
+    ...(isTuesdayOrThursdayMorning ? [{ value: 'uro', label: clinicLabelMap['uro'] }] : []),
+  ]
 
   useEffect(() => {
     let clinic: string[] = []
-    let isReferCase = false
+    let isReferCase = true
     const symptoms: string[] = ['uti']
-    const noteParts: string[] = []
+    const noteParts: string[] = ['UTI']
 
     if (gender === '1') {
-      clinic = ['uro']
+      const hasAnySymptom = hasProstateIssue || hasUrinaryRetention
+      if (!hasAnySymptom) {
+        onResult(null)
+        return
+      }
+
       if (hasProstateIssue) {
         symptoms.push('prostate_issue')
         noteParts.push('สงสัยต่อมลูกหมากโต')
       }
       if (hasUrinaryRetention) {
         symptoms.push('urinary_retention')
-        noteParts.push('ปัสสาวะขัดหรือไม่สุด')
+        noteParts.push('ปัสสาวะขัด/ไม่สุด')
       }
+
+      clinic = isTuesdayOrThursdayMorning ? ['uro'] : ['surg']
     } else if (gender === '2') {
-      clinic = ['med']
+      clinic = ['muang']
     } else if (gender === '3') {
       if (!customClinic) {
         onResult(null)
         return
       }
       clinic = [customClinic]
-      isReferCase = true
+      noteParts.push(`เลือกแผนก: ${clinicLabelMap[customClinic] || customClinic}`)
+    } else {
+      onResult(null)
+      return
     }
 
     if (extraNote.trim()) {
       noteParts.push(extraNote.trim())
     }
 
-    const finalNote = noteParts.length > 0 ? noteParts.join(' | ') : undefined
-    const key = `${clinic.join(',')}|${symptoms.join(',')}|${finalNote}|${isReferCase}`
+    const finalNote = noteParts.join(' | ')
+    const key = `${gender}|${clinic.join(',')}|${symptoms.join(',')}|${finalNote}`
 
     if (prevKeyRef.current !== key) {
       prevKeyRef.current = key
@@ -79,6 +102,7 @@ export default function Question6_UTI({
         note: finalNote,
         symptoms,
         isReferCase,
+        type,
       })
     }
   }, [
@@ -87,7 +111,7 @@ export default function Question6_UTI({
     hasUrinaryRetention,
     customClinic,
     extraNote,
-    onResult,
+    type,
   ])
 
   return (
@@ -99,14 +123,16 @@ export default function Question6_UTI({
         </label>
         <select
           id="genderSelect"
-          title="เลือกเพศของผู้ป่วย"
           value={gender}
-          onChange={(e) => setGender(e.target.value as '1' | '2' | '3')}
+          onChange={(e) => {
+            setGender(e.target.value as '1' | '2' | '3')
+            setCustomClinic(null)
+          }}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
         >
           <option value="1">ชาย</option>
           <option value="2">หญิง</option>
-          <option value="3">ไม่ระบุ</option>
+          <option value="3">ไม่ทราบแน่ชัด</option>
         </select>
       </div>
 
@@ -135,11 +161,11 @@ export default function Question6_UTI({
         </div>
       )}
 
-      {/* กรณีไม่ระบุเพศ → เลือกแผนก */}
+      {/* เลือกแผนกเอง (เฉพาะเพศไม่ระบุ) */}
       {gender === '3' && (
         <div className="space-y-2">
           <label className="block font-medium text-gray-700 mb-1">
-            กรุณาเลือกแผนกที่ต้องการส่งต่อ
+            เลือกแผนกที่ต้องการส่งต่อ
           </label>
           <Select
             options={clinicOptions}
@@ -163,7 +189,7 @@ export default function Question6_UTI({
           rows={2}
           value={extraNote}
           onChange={(e) => setExtraNote(e.target.value)}
-          placeholder="ระบุรายละเอียด เช่น ปวดหน่วงมาก / ปัสสาวะแสบขัด ฯลฯ"
+          placeholder="ระบุรายละเอียดเพิ่มเติม เช่น ปวดแสบขัด / เป็นซ้ำ ฯลฯ"
         />
       </div>
     </div>

@@ -11,64 +11,95 @@ interface ThyroidResult {
   note?: string
   symptoms: string[]
   isReferCase: boolean
+  type: string
 }
 
 interface ThyroidProps {
-  onResult: (result: ThyroidResult) => void
+  onResult: (result: ThyroidResult | null) => void
+  type: string
 }
 
-export default function Question5_Thyroid({ onResult }: ThyroidProps) {
-  const [isNewCase, setIsNewCase] = useState(false)
+export default function Question5_Thyroid({ onResult, type }: ThyroidProps) {
+  const [hasSelected, setHasSelected] = useState(false)
+  const [isNewCase, setIsNewCase] = useState<boolean | null>(null)
   const [note, setNote] = useState('')
 
   useEffect(() => {
-    const day = getThaiDayNumber()
-    const weekday = day >= 1 && day <= 5 ? day : 1 // Treat Sat/Sun as Monday
+    // ถ้ายังไม่ได้เลือก new/followup ให้ส่ง null ออกไป
+    if (!hasSelected || isNewCase === null) {
+      onResult(null)
+      return
+    }
+
+    const today = getThaiDayNumber()
+    const weekday = today >= 1 && today <= 5 ? today : 1 // เปลี่ยนวันหยุดเป็นวันจันทร์
+
+    // สร้างค่าผลลัพธ์
+    const baseSymptoms: string[] = ['thyroid']
+    const noteItems: string[] = []
 
     let clinic = ''
-    const symptoms: string[] = ['thyroid']
-    const noteParts: string[] = []
-
     if (isNewCase) {
       clinic = 'muang'
-      symptoms.push('thyroid_new')
-      noteParts.push('New Case')
+      baseSymptoms.push('thyroid_new')
+      noteItems.push('New Case')
     } else {
       clinic = weekday % 2 === 0 ? 'ent' : 'surg'
-      symptoms.push('thyroid_followup')
-      noteParts.push('Follow-up')
+      baseSymptoms.push('thyroid_followup')
+      noteItems.push('Follow-up')
     }
 
     if (note.trim()) {
-      noteParts.push(note.trim())
+      noteItems.push(note.trim())
     }
 
-    const fullNote = noteParts.join(' | ')
-
-    onResult({
+    const result: ThyroidResult = {
       question: 'ThyroidCase',
       question_code: 5,
       question_title: 'ไทรอยด์ (Thyroid)',
       clinic: [clinic],
-      note: fullNote,
-      symptoms,
+      note: noteItems.length > 0 ? noteItems.join(' | ') : undefined,
+      symptoms: baseSymptoms,
       isReferCase: true,
-    })
-  }, [isNewCase, note])
+      type,
+    }
+
+    onResult(result)
+  }, [hasSelected, isNewCase, note, type])
 
   return (
     <div className="space-y-3 text-sm text-gray-800">
       <p>ผู้ป่วยเป็นไทรอยด์ เป็น New Case หรือไม่?</p>
 
-      <label className="inline-flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={isNewCase}
-          onChange={(e) => setIsNewCase(e.target.checked)}
-          className="w-4 h-4 text-blue-600 border-gray-300 rounded"
-        />
-        <span>New Case</span>
-      </label>
+      <div className="flex items-center gap-4">
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="radio"
+            name="thyroid-case"
+            value="new"
+            checked={isNewCase === true}
+            onChange={() => {
+              setIsNewCase(true)
+              setHasSelected(true)
+            }}
+          />
+          <span>New Case</span>
+        </label>
+
+        <label className="inline-flex items-center gap-2">
+          <input
+            type="radio"
+            name="thyroid-case"
+            value="followup"
+            checked={isNewCase === false}
+            onChange={() => {
+              setIsNewCase(false)
+              setHasSelected(true)
+            }}
+          />
+          <span>Follow-up</span>
+        </label>
+      </div>
 
       <div>
         <label htmlFor="note" className="block font-medium mt-2 mb-1">

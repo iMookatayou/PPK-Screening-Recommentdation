@@ -6,11 +6,9 @@
   background: linear-gradient(90deg, #ffffff 0%, #f3f4f6 100%);
   border-bottom: 1px solid #e5e7eb;
   font-family: 'Sarabun', sans-serif;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
   position: sticky;
   top: 0;
   z-index: 1000;
-  transition: background-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .left {
@@ -43,13 +41,11 @@
   font-weight: 700;
   color: #1f2937;
   margin-bottom: 2px;
-  letter-spacing: 0.2px;
 }
 
 .titleTh {
   font-size: 0.9rem;
   color: #4b5563;
-  line-height: 1;
 }
 
 .divider {
@@ -62,7 +58,7 @@
   gap: 1rem;
 }
 
-/* กล่อง user */
+/* UserBox */
 .userBox {
   display: flex;
   align-items: center;
@@ -71,8 +67,10 @@
   border: 1px solid #e5e7eb;
   padding: 0.25rem 0.75rem;
   border-radius: 9999px;
-  animation: fadeIn 0.3s ease forwards;
   max-height: 40px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .avatar {
@@ -81,37 +79,23 @@
   border-radius: 50%;
   object-fit: cover;
   border: 1px solid #d1d5db;
-  transition: box-shadow 0.2s ease;
-}
-
-.avatar:hover {
-  box-shadow: 0 0 5px rgba(0, 0, 0, 0.15);
-}
-
-.userInfo {
-  text-align: right;
-  line-height: 1.3;
 }
 
 .name {
   font-weight: 600;
-  color: #111827;
   font-size: 0.9rem;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 160px;
   white-space: nowrap;
 }
 
-.group {
-  font-size: 0.75rem;
-  color: #9ca3af;
-  white-space: nowrap;
-}
-
-/* ปุ่ม logout */
 .logoutBtn {
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #f3f4f6;
+  background-color: #f9fafb;
   color: #374151;
   border: 1px solid #d1d5db;
   padding: 0.4rem;
@@ -129,34 +113,81 @@
 .logoutIcon {
   width: 18px;
   height: 18px;
-  stroke-width: 2;
-  transition: transform 0.2s ease;
 }
 
-.logoutBtn:hover .logoutIcon {
-  transform: rotate(-15deg) scale(1.1);
+/* Hamburger menu (default hidden) */
+.hamburgerWrapper {
+  display: none;
+  position: relative;
 }
 
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(-3px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.hamburger {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #374151;
 }
 
-/* ซ่อนข้อความแต่ยังอ่านได้ (accessibility) */
-.sr-only {
+.dropdownMenu {
   position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0,0,0,0);
-  white-space: nowrap;
-  border: 0;
+  top: 42px;
+  right: 0;
+  background-color: white;
+  border: 1px solid #e5e7eb;
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.08);
+  z-index: 1001;
+  width: 180px;
+}
+
+.dropdownMenu .userInfo {
+  font-weight: 600;
+  margin-bottom: 0.5rem;
+  color: #111827;
+}
+
+.dropdownLogout {
+  width: 100%;
+  background-color: #f3f4f6;
+  border: none;
+  padding: 0.5rem;
+  border-radius: 0.4rem;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.dropdownLogout:hover {
+  background-color: #e5e7eb;
+}
+
+/* ---------- iPad (768px–1024px) ---------- */
+@media (max-width: 1024px) {
+  .titleGroup {
+    display: none;
+  }
+
+  .name {
+    max-width: 100px;
+  }
+
+  .userBox {
+    padding: 0.25rem 0.5rem;
+  }
+}
+
+/* ---------- Mobile ≤600px ---------- */
+@media (max-width: 600px) {
+  .userBox,
+  .logoutBtn {
+    display: none;
+  }
+
+  .hamburgerWrapper {
+    display: block;
+  }
+
+  .titleGroup {
+    display: none;
+  }
 }

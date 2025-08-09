@@ -13,13 +13,16 @@ export interface Question16Result {
   note?: string
   symptoms: string[]
   isReferCase: boolean
+  routedBy: 'auto'
+  type: string
 }
 
 type Props = {
-  onResult: (data: Question16Result) => void
+  onResult: (data: Question16Result | null) => void
+  type: string
 }
 
-export default function Question16_Keloid({ onResult }: Props) {
+export default function Question16_Keloid({ onResult, type }: Props) {
   const [shownPopup, setShownPopup] = useState(false)
   const [popupOpen, setPopupOpen] = useState(false)
   const [extraNote, setExtraNote] = useState('')
@@ -27,29 +30,33 @@ export default function Question16_Keloid({ onResult }: Props) {
   const allow = isAllowableKeloidDay()
   const thaiDay = getThaiDayName()
 
-  // Memoize the result calculation to prevent unnecessary recalculations
-  const calculateResult = useCallback(() => {
+  // Memoized logic for preparing the result
+  const calculateResult = useCallback((): Question16Result => {
     const symptoms = ['keloid']
     if (!allow) symptoms.push('not_service_day')
 
-    const noteBase = allow
+    let noteBase = allow
       ? 'ตรวจติดตาม Keloid ตามวันให้บริการ'
       : `ไม่สามารถตรวจได้ในวัน${thaiDay} (นอกวันให้บริการ)`
 
-    const note = extraNote.trim() ? `${noteBase} | หมายเหตุ: ${extraNote.trim()}` : noteBase
+    if (extraNote.trim()) {
+      noteBase += ` | หมายเหตุ: ${extraNote.trim()}`
+    }
 
     return {
       question: 'KeloidCheck',
       question_code: 16,
       question_title: 'ตรวจติดตาม Keloid (แผลเป็นนูน)',
       clinic: allow ? ['plastic'] : [],
-      note,
+      note: noteBase,
       symptoms,
       isReferCase: false,
+      routedBy: 'auto',
+      type,
     }
-  }, [allow, thaiDay, extraNote])
+  }, [allow, thaiDay, extraNote, type])
 
-  // Effect for showing popup (runs only when allow changes)
+  // Popup only shown once
   useEffect(() => {
     if (!allow && !shownPopup) {
       setPopupOpen(true)
@@ -57,11 +64,17 @@ export default function Question16_Keloid({ onResult }: Props) {
     }
   }, [allow, shownPopup])
 
-  // Effect for sending results (debounced to prevent rapid updates)
+  // Debounced onResult()
   useEffect(() => {
     const timer = setTimeout(() => {
-      onResult(calculateResult())
-    }, 100) // Small debounce delay
+      const result = calculateResult()
+      const isEmpty =
+        result.clinic.length === 0 &&
+        result.symptoms.length === 0 &&
+        !result.note?.trim()
+
+      onResult(isEmpty ? null : result)
+    }, 100)
 
     return () => clearTimeout(timer)
   }, [calculateResult, onResult])
@@ -85,9 +98,8 @@ export default function Question16_Keloid({ onResult }: Props) {
         </div>
       )}
 
-      {/* Additional notes input */}
-      <div>
-        <label htmlFor="extraNote" className="block font-medium mt-4">
+      <div className="mt-4">
+        <label htmlFor="extraNote" className="block font-medium mb-1">
           หมายเหตุเพิ่มเติม (ถ้ามี)
         </label>
         <textarea
@@ -95,12 +107,12 @@ export default function Question16_Keloid({ onResult }: Props) {
           rows={2}
           className="w-full border px-3 py-2 rounded"
           placeholder="ระบุรายละเอียดเพิ่มเติม เช่น มีอาการบวมมากขึ้น"
+          title="หมายเหตุเพิ่มเติม"
           value={extraNote}
           onChange={(e) => setExtraNote(e.target.value)}
         />
       </div>
 
-      {/* Service day warning popup */}
       <ReusablePopup
         isOpen={popupOpen}
         onClose={() => setPopupOpen(false)}

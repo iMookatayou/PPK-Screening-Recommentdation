@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import Select from 'react-select'
 import { getThaiDayNumber } from '@/lib/dateUtils'
 
@@ -14,10 +14,12 @@ interface AnimalBiteResult {
   clinic: string[]
   note?: string
   symptoms: string[]
+  type: string
 }
 
 interface AnimalBiteProps {
-  onResult: (result: AnimalBiteResult) => void
+  onResult: (result: AnimalBiteResult | null) => void
+  type: string
 }
 
 const clinicLabelMap: Record<string, string> = {
@@ -39,7 +41,7 @@ const clinicLabelMap: Record<string, string> = {
   occmed: 'อาชีวเวชกรรม',
 }
 
-export default function Question4_AnimalBite({ onResult }: AnimalBiteProps) {
+export default function Question4_AnimalBite({ onResult, type }: AnimalBiteProps) {
   const [animalType, setAnimalType] = useState('')
   const [customAnimal, setCustomAnimal] = useState('')
   const [customClinic, setCustomClinic] = useState<{ label: string; value: string } | null>({
@@ -53,71 +55,83 @@ export default function Question4_AnimalBite({ onResult }: AnimalBiteProps) {
     label,
   }))
 
-  const handleChange = (
-    type: string,
-    customAnimalText?: string,
-    customClinicValue?: { label: string; value: string } | null,
-    extraNoteText?: string
-  ) => {
+  useEffect(() => {
+    if (!animalType || animalType === '') {
+      onResult(null)
+      return
+    }
+
     const day = getThaiDayNumber()
 
     let clinic = 'muang'
     let isReferCase = false
     let note = ''
-    let summary = type
+    let summary = animalType
     const symptoms: string[] = ['animal_bite']
 
-    if (['งู', 'ตะขาบ', 'แมลงป่อง'].includes(type)) {
+    if (['งู', 'ตะขาบ', 'แมลงป่อง'].includes(animalType)) {
       clinic = 'er'
       isReferCase = true
-      symptoms.push(type === 'งู' ? 'snake_bite' : type === 'ตะขาบ' ? 'centipede_bite' : 'scorpion_sting')
-      note = `สัตว์ที่กัด/ต่อย: ${type}`
-    } else if (['สุนัข', 'แมว', 'หนู'].includes(type)) {
+      symptoms.push(
+        animalType === 'งู'
+          ? 'snake_bite'
+          : animalType === 'ตะขาบ'
+          ? 'centipede_bite'
+          : 'scorpion_sting'
+      )
+      note = `สัตว์ที่กัด/ต่อย: ${animalType}`
+    } else if (['สุนัข', 'แมว', 'หนู'].includes(animalType)) {
       clinic = 'muang'
       isReferCase = false
-      symptoms.push(type === 'สุนัข' ? 'dog_bite' : type === 'แมว' ? 'cat_bite' : 'rat_bite')
-      note = `สัตว์ที่กัด/ต่อย: ${type}`
-    } else if (type === 'อื่นๆ') {
-      clinic = customClinicValue?.value || 'muang'
+      symptoms.push(
+        animalType === 'สุนัข'
+          ? 'dog_bite'
+          : animalType === 'แมว'
+          ? 'cat_bite'
+          : 'rat_bite'
+      )
+      note = `สัตว์ที่กัด/ต่อย: ${animalType}`
+    } else if (animalType === 'อื่นๆ') {
+      const animal = customAnimal.trim()
+      clinic = customClinic?.value || 'muang'
       isReferCase = false
-      const animal = customAnimalText?.trim() || ''
       if (animal) {
         summary = `อื่นๆ: ${animal}`
         symptoms.push('other_animal')
         note = `สัตว์ที่กัด/ต่อย: ${animal}`
+      } else {
+        onResult(null)
+        return
       }
     }
 
-    if (extraNoteText && extraNoteText.trim()) {
-      note += ` | หมายเหตุเพิ่มเติม: ${extraNoteText.trim()}`
+    if (extraNote.trim()) {
+      note += ` | หมายเหตุเพิ่มเติม: ${extraNote.trim()}`
     }
 
     onResult({
       question: 'AnimalBite',
       question_code: 4,
       question_title: 'สัตว์กัด/ต่อย',
-      animalType: type,
+      animalType,
       animalSummary: summary,
       isReferCase,
       clinic: [clinic],
       note: note || undefined,
       symptoms,
+      type,
     })
-  }
+  }, [animalType, customAnimal, customClinic, extraNote, type])
 
   return (
     <div className="space-y-3 text-sm">
       <label htmlFor="animalSelect" className="text-gray-700 font-medium">
-        สัตว์ชนิดใดเป็นผู้กัด/ต่อยผู้ป่วย?
+        โดนสัตว์กกัดหรือแมลงกัดต่อย อาจต้องการวัคซีนหรือการรักษาเพิ่มเติม
       </label>
       <select
         id="animalSelect"
         value={animalType}
-        onChange={(e) => {
-          const newType = e.target.value
-          setAnimalType(newType)
-          handleChange(newType, customAnimal, customClinic, extraNote)
-        }}
+        onChange={(e) => setAnimalType(e.target.value)}
         className="w-full border rounded px-3 py-2 text-sm"
       >
         <option value="">-- โปรดเลือกสัตว์ --</option>
@@ -137,11 +151,7 @@ export default function Question4_AnimalBite({ onResult }: AnimalBiteProps) {
             <input
               type="text"
               value={customAnimal}
-              onChange={(e) => {
-                const val = e.target.value
-                setCustomAnimal(val)
-                handleChange(animalType, val, customClinic, extraNote)
-              }}
+              onChange={(e) => setCustomAnimal(e.target.value)}
               placeholder="โปรดระบุ"
               className="w-full border rounded px-3 py-2 text-sm mt-1"
             />
@@ -150,13 +160,13 @@ export default function Question4_AnimalBite({ onResult }: AnimalBiteProps) {
           <div>
             <label className="text-gray-700 font-medium">เลือกห้องตรวจ</label>
             <Select
-              options={clinicOptions}
+              options={[
+                { value: 'muang', label: clinicLabelMap['muang'] },
+                { value: 'er', label: clinicLabelMap['er'] },
+              ]}
               placeholder="ค้นหาและเลือกแผนก..."
               value={customClinic}
-              onChange={(selected) => {
-                setCustomClinic(selected)
-                handleChange(animalType, customAnimal, selected, extraNote)
-              }}
+              onChange={(selected) => setCustomClinic(selected)}
               isClearable
               className="text-sm mt-1"
             />
@@ -173,11 +183,7 @@ export default function Question4_AnimalBite({ onResult }: AnimalBiteProps) {
           className="w-full border px-3 py-2 rounded"
           rows={2}
           value={extraNote}
-          onChange={(e) => {
-            const val = e.target.value
-            setExtraNote(val)
-            handleChange(animalType, customAnimal, customClinic, val)
-          }}
+          onChange={(e) => setExtraNote(e.target.value)}
           placeholder="ระบุหมายเหตุเพิ่มเติม เช่น บาดแผลลึก, เป็นแผลที่นิ้วมือ"
         />
       </div>
