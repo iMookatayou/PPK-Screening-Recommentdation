@@ -37,7 +37,7 @@ function setJsonHeaders(config: InternalAxiosRequestConfig) {
   headers.set('Content-Type', 'application/json')
 }
 
-// ---- Public instance (login/register ฯลฯ) ----
+// ---- Public instance (สำหรับ login/register ฯลฯ) ----
 export const api: AxiosInstance = axios.create({
   baseURL,
   timeout: 15000,
@@ -75,7 +75,9 @@ authAxios.interceptors.request.use(
 authAxios.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status
+    // 401: Unauthorized, 419: Laravel session/token expired
+    if (status === 401 || status === 419) {
       try {
         localStorage.setItem(
           'auth_event',
@@ -86,3 +88,21 @@ authAxios.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// ---- Export helper สำหรับ AuthContext ----
+export function setAuthHeader(token?: string) {
+  if (token) {
+    authAxios.defaults.headers.common['Authorization'] = `Bearer ${token}`
+    try { localStorage.setItem('token', token) } catch {}
+  } else {
+    delete authAxios.defaults.headers.common['Authorization']
+  }
+}
+
+// ---- ตั้งค่าเริ่มต้นจาก localStorage (กันรีเฟรชแล้ว header หาย) ----
+try {
+  if (typeof window !== 'undefined') {
+    const t = localStorage.getItem('token')
+    if (t) setAuthHeader(t)
+  }
+} catch {}

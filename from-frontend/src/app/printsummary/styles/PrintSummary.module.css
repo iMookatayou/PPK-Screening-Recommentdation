@@ -1,21 +1,21 @@
-/* Wrapper */
+/* ============ Wrapper ============ */
 .wrapper {
-  max-width: 794px; /* A4 width at 96dpi */
+  max-width: 794px; /* A4 width @96dpi */
   margin: 0 auto;
   padding: 24px;
   font-family: 'Sarabun', 'TH SarabunPSK', sans-serif;
   font-size: 15px;
   line-height: 1.5;
   color: #000;
-  background-color: #fff;
+  background: #fff;
 }
 
-/* Header inline: โลโก้ + ข้อความแนวนอน */
+/* ============ Header (inline) ============ */
 .header {
   display: flex;
-  align-items: flex-end; /* << จากเดิม flex-start */
+  align-items: flex-end;        /* โลโก้ชิดบรรทัดล่างเท็กซ์ */
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
 }
 
 .logo {
@@ -24,39 +24,59 @@
   flex-shrink: 0;
 }
 
-.headerTextInline h2 {
+.headerTextBox {               /* กล่องข้อความด้านขวาโลโก้ */
+  display: flex;
+  align-items: flex-end;
+}
+
+.headerText {                  /* บรรทัดชื่อ รพ. + ชื่อฟอร์ม */
+  margin: 0;
   font-size: 16px;
   font-weight: 500;
-  margin: 0;
-  white-space: normal;
   line-height: 1.4;
+  white-space: normal;
 }
 
 .hospitalName {
-  color: #007a00; /* เขียว */
-  font-weight: 500;
+  color: #007a00;
+  font-weight: 600;
 }
 
 .formTitle {
-  color: #000; /* ดำ */
-  font-weight: 500;
+  color: #000;
+  font-weight: 600;
+  margin-left: 6px;
 }
 
-/* Patient Info */
+/* ============ Patient Info (no box) ============ */
 .patientInfo {
-  background: #f9f9f9;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  padding: 12px;
-  margin-bottom: 24px;
+  background: transparent;     /* ไม่มีพื้นหลัง */
+  border: none;                /* ไม่มีกรอบ */
+  padding: 0;
+  margin: 8px 0 16px;
   font-size: 14px;
 }
 
-/* Table */
+.patientInfo p {
+  margin: 2px 0;               /* ระยะห่างเล็กน้อย */
+}
+
+/* ============ Alert ============ */
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #d00000;
+  font-weight: 700;
+  margin: 12px 0 20px;
+  font-size: 14px;
+}
+
+/* ============ Table ============ */
 .table {
   width: 100%;
   border-collapse: collapse;
-  margin-bottom: 24px;
+  margin: 12px 0 24px;
 }
 
 .table th,
@@ -69,34 +89,23 @@
 }
 
 .table th {
-  background-color: #e9f5e9;
-  font-weight: bold;
+  background: #e9f5e9;
+  font-weight: 700;
 }
 
-/* Alert */
-.alert {
-  display: flex;
-  align-items: center;
-  color: #d00000;
-  font-weight: bold;
-  margin-bottom: 20px;
-  gap: 6px;
-  font-size: 14px;
-}
-
-/* Footer */
+/* ============ Footer ============ */
 .footer {
-  margin-top: 32px;
+  margin-top: 28px;
   font-size: 14px;
 }
 
 .footer p {
-  margin-bottom: 10px;
+  margin: 8px 0 10px;
 }
 
-/* Buttons */
+/* ============ Buttons ============ */
 .buttonGroup {
-  margin-top: 20px;
+  margin-top: 18px;
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
@@ -106,72 +115,17 @@
   padding: 6px 12px;
   font-size: 14px;
   border: 1px solid #aaa;
-  background-color: #f2f2f2;
+  background: #f2f2f2;
   border-radius: 4px;
   cursor: pointer;
-  display: flex;
+  display: flex; gap: 8px;
   align-items: center;
   transition: 0.2s;
 }
 
 .buttonGroup button:hover {
-  background-color: #e0e0e0;
+  background: #e0e0e0;
 }
 
-/* Hide on print */
-@media print {
-  .buttonGroup {
-    display: none;
-  }
-
-  body {
-    background: none;
-    margin: 0;
-  }
-
-  .wrapper {
-    padding: 0;
-  }
-
-  .table th,
-  .table td {
-    font-size: 13px;
-    padding: 5px 8px;
-  }
-}
-
-/* Responsive for tablets (iPad) */
-@media screen and (max-width: 768px) {
-  .wrapper {
-    padding: 16px;
-    font-size: 14px;
-  }
-
-  .headerTextInline h2 {
-    font-size: 15px;
-  }
-
-  .hospitalName {
-    font-size: 15px;
-  }
-
-  .formTitle {
-    font-size: 15px;
-  }
-
-  .table th,
-  .table td {
-    font-size: 13px;
-    padding: 5px 8px;
-  }
-
-  .buttonGroup {
-    flex-direction: column;
-    align-items: stretch;
-  }
-
-  .buttonGroup button {
-    width: 100%;
-    justify-content: center;
-  }
-}
+.btn { display: inline-flex; align-items: center; gap: 6px; }
+.icon { flex-shrink: 0; }

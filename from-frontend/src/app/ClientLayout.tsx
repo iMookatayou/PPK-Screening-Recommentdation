@@ -6,8 +6,8 @@ import TopNavbar from './components/topbar/TopNavbar'
 import Sidebar from './components/sidebar/Sidebar'
 import type { ThaiIDData } from '@/app/types/globalType'
 
-const CARD_API = process.env.NEXT_PUBLIC_CARD_API // ตั้งค่าใน .env เช่น https://your-card-api.com
-const CHECK_INTERVAL = 3000 // ms
+const CARD_API = process.env.NEXT_PUBLIC_CARD_API
+const CHECK_INTERVAL = 3000
 
 const ThaiIDContext = createContext<{
   data: ThaiIDData | null
@@ -63,16 +63,10 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
         `${CARD_API}/get_cid_data?callback=cb&section1=true&section2a=true&section2c=true`
       )
       const text = await res.text()
-
-      // แปลง JSONP → JSON
       const jsonText = text.replace(/^\/\*\*\/cb\((.*)\);$/, '$1')
       const card = JSON.parse(jsonText)
 
-      if (!card || !card.CitizenID) {
-        console.log('No card detected')
-        return
-      }
-
+      if (!card || !card.CitizenID) return
       if (card.CitizenID === lastCID.current) return
       lastCID.current = card.CitizenID
 
@@ -116,9 +110,7 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     startCardReading()
-    return () => {
-      cleanup()
-    }
+    return () => cleanup()
   }, [])
 
   return (
@@ -128,35 +120,35 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
   )
 }
 
-export default function ClientLayout({ children }: { children: ReactNode }) {
+export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const layoutExcludedPaths = ['/login', '/register', '/print-form']
   const isExcluded = layoutExcludedPaths.some((path) => pathname.startsWith(path))
 
   const [selected, setSelected] = useState<number[]>([])
   const [mounted, setMounted] = useState(false)
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
+  useEffect(() => { setMounted(true) }, [])
   if (!mounted) return null
   if (isExcluded) return <>{children}</>
 
   return (
     <ThaiIDProvider>
+      {/* โครงหลัก */}
       <div className="min-h-screen flex flex-col bg-white">
-        <TopNavbar />
+        {/* ให้ topbar อยู่เหนือ content แต่ไม่สูงเกิน overlay */}
+        <div className="sticky top-0 z-[100]">
+          <TopNavbar />
+        </div>
+
         <div className="flex flex-1 overflow-hidden">
-          <aside className="w-[240px] min-w-[200px] border-r border-gray-200 bg-gray-50 overflow-y-auto">
-            <Sidebar
-              selected={selected}
-              setSelected={setSelected}
-              setShowRightPanel={() => {}}
-            />
+          {/* sidebar: z-index ต่ำกว่า topbarนิดหน่อย */}
+          <aside className="w-[260px] shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto z-[90]">
+            <Sidebar selected={selected} setSelected={setSelected} setShowRightPanel={() => {}} />
           </aside>
-          <main className="flex-1 overflow-y-auto bg-[--background] text-[--foreground] p-4">
-            <div className="w-full max-w-[1000px] mx-auto">
+
+          {/* content: หลีกเลี่ยง transform/filter/opacity ที่สร้าง stacking context */}
+          <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[--background] text-[--foreground] p-4">
+            <div className="w-full max-w-none">
               {children}
             </div>
           </main>

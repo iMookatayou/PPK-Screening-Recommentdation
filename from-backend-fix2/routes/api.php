@@ -10,52 +10,53 @@ use App\Http\Controllers\SummaryController;
 
 /*
 |--------------------------------------------------------------------------
-| Public Routes (ไม่ต้องมี token)
+| Public Routes
 |--------------------------------------------------------------------------
 */
 Route::post('/register', [AuthController::class, 'register'])
-    ->middleware('throttle:5,1');
+    ->middleware('throttle:auth-register');
 
 Route::post('/login-token', [AuthController::class, 'login'])
-    ->middleware('throttle:5,1');
+    ->middleware('throttle:auth-login');
 
 /*
 |--------------------------------------------------------------------------
-| Protected Routes (ต้องมี Bearer token และไม่หมดอายุ)
+| Protected Routes
 |--------------------------------------------------------------------------
 */
 Route::middleware(['manualTokenAuth', 'token.expiration'])->group(function () {
-
-    // ---------- Auth ----------
+    // Auth
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/user', [AuthController::class, 'update']);
     Route::post('/logout-token', [AuthController::class, 'logout']);
 
-    // ---------- Referral Guidance ----------
+    // Referral Guidance
     Route::post('/referral-guidances', [ReferralGuidanceController::class, 'store']);
     Route::get('/referral-guidances/summary', [ReferralGuidanceController::class, 'summary']);
 
-    // ---------- Form PPK ----------
+    // Form PPK
     Route::get('/form-ppk', [FormPPKController::class, 'index']);
     Route::post('/form-ppk', [FormPPKController::class, 'store']);
-    Route::get('/form-ppk/summary', [FormPPKController::class, 'summary']); // ไว้ก่อน {case_id}
+    Route::get('/form-ppk/summary', [FormPPKController::class, 'summary']);
     Route::get('/form-ppk/{case_id}', [FormPPKController::class, 'show']);
     Route::put('/form-ppk/{case_id}', [FormPPKController::class, 'update']);
     Route::delete('/form-ppk/{case_id}', [FormPPKController::class, 'destroy']);
 
-    // ---------- Disease ----------
+    Route::post('/patients/history', [FormPPKController::class, 'historyPost']);
+    Route::post('/form-ppk/show', [FormPPKController::class, 'showPost']);
+
     Route::get('/diseases', [DiseaseController::class, 'index']);
 
-    // ---------- Summary (ยอดรวมทั่วระบบ) ----------
-    Route::get('/summary', [SummaryController::class, 'index']); // ?type, start_date, end_date
+    // Summary
+    Route::get('/summary', [SummaryController::class, 'index']);
 
-    // ---------- Admin Only ----------
-    // ---------- Admin Only ----------
+    // Admin Only   
     Route::middleware('role:admin')->prefix('admin')->group(function () {
+        Route::get('/users', [AdminUserController::class, 'index']);
         Route::get('/users/pending', [AdminUserController::class, 'getPendingUsers']);
-        Route::put('/users/{id}/approve', [AdminUserController::class, 'approveUser']); // ✅ แก้ตรงนี้
-        Route::put('/users/{id}/reject', [AdminUserController::class, 'rejectUser']);
-        Route::get('/users/all', [AdminUserController::class, 'getAllUsers']);
+        Route::put('/users/{id}/approve', [AdminUserController::class, 'approveUser']);
+        Route::put('/users/{id}/reject',  [AdminUserController::class, 'rejectUser']);
+        Route::put('/users/{id}/allow-reapply', [AdminUserController::class, 'allowReapply']);
+        Route::put('/users/{id}/block-reapply', [AdminUserController::class, 'blockReapply']);
     });
-
 });

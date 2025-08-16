@@ -20,26 +20,21 @@ class SummaryController extends Controller
     /**
      * GET /api/summary
      * Query params:
-     *  - type: formppk|referral (optional; omit = combined)
+     *  - type: form|guide|total (optional; omit = total)  // รองรับ alias formppk ด้วย
      *  - start_date: YYYY-MM-DD (optional)
      *  - end_date:   YYYY-MM-DD (optional)
-     *
-     * Behaviour:
-     *  - If only one date is provided, use that same date for both (single-day range).
-     *  - If start_date > end_date, they will be swapped for you.
-     *  - Date boundaries are handled in SummaryService using startOfDay()/endOfDay() with app timezone.
      */
     public function index(Request $request)
     {
-        // 1) Validate query params
+        // 1) Validate query params (ยอมรับ formppk เพื่อ backward compat)
         $validator = Validator::make($request->all(), [
-            'type'       => 'nullable|in:formppk,referral',
+            'type'       => 'nullable|in:form,guide,total,formppk',
             'start_date' => 'nullable|date_format:Y-m-d',
             'end_date'   => 'nullable|date_format:Y-m-d',
         ], [
-            'type.in'            => 'type ต้องเป็น formppk หรือ referral เท่านั้น',
-            'start_date.date_format' => 'start_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
-            'end_date.date_format'   => 'end_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
+            'type.in'                 => 'type ต้องเป็น form, guide, total หรือ formppk เท่านั้น',
+            'start_date.date_format'  => 'start_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
+            'end_date.date_format'    => 'end_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
         ]);
 
         if ($validator->fails()) {
@@ -49,55 +44,51 @@ class SummaryController extends Controller
             ], 422);
         }
 
-        $type      = $request->query('type');        // null|formppk|referral
-        $startDate = $request->query('start_date');  // YYYY-MM-DD|null
-        $endDate   = $request->query('end_date');    // YYYY-MM-DD|null
+        // 2) Normalize params
+        $type      = $request->query('type') ?: 'total'; // default รวมยอดเดียว
+        if ($type === 'formppk') {
+            $type = 'form';
+        }
+
+        $startDate = $request->query('start_date');
+        $endDate   = $request->query('end_date');
 
         try {
-            // 2) If only one date provided, treat as single-day range
+            // 3) Single-day and swap handling
             if ($startDate && !$endDate) {
                 $endDate = $startDate;
             } elseif ($endDate && !$startDate) {
                 $startDate = $endDate;
             }
 
-            // 3) If both provided but reversed, swap them
             if ($startDate && $endDate) {
                 $tz = config('app.timezone', 'Asia/Bangkok');
                 $start = Carbon::parse($startDate, $tz)->startOfDay();
                 $end   = Carbon::parse($endDate, $tz)->endOfDay();
 
                 if ($start->greaterThan($end)) {
-                    // swap
                     [$startDate, $endDate] = [$end->toDateString(), $start->toDateString()];
                 } else {
-                    // normalize back to date-only strings (service will expand to full-day again)
                     $startDate = $start->toDateString();
                     $endDate   = $end->toDateString();
                 }
             }
 
-            // 4) Fetch summary via service (single source of truth)
-            if ($type) {
-                $summary = $this->summaryService->getSummary($type, $startDate, $endDate);
-            } else {
-                $summary = $this->summaryService->getCombinedSummary($startDate, $endDate);
-            }
+            // 4) Fetch summary via service
+            $summary = $this->summaryService->getSummary($type, $startDate, $endDate);
 
-            // 5) Build response
-            $response = [
+            // 5) Response
+            return response()->json([
                 'message' => 'Summary fetched successfully',
                 'meta'    => [
-                    'type'        => $type ?? 'combined',
+                    'type'        => $type,
                     'start_date'  => $startDate,
                     'end_date'    => $endDate,
                     'timezone'    => config('app.timezone', 'Asia/Bangkok'),
                     'generated_at'=> Carbon::now(config('app.timezone', 'Asia/Bangkok'))->toIso8601String(),
                 ],
-                'data'    => is_array($summary) ? $summary : $summary->toArray(),
-            ];
-
-            return response()->json($response, 200);
+                'data'    => $summary->toArray(),
+            ], 200);
 
         } catch (\Throwable $e) {
             Log::error('[SummaryController] index failed', [

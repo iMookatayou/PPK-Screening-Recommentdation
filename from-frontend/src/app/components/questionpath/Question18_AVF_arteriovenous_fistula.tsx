@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 export interface Question18Result {
   question: string
@@ -21,29 +21,28 @@ interface Props {
 
 export default function Question18_AVFWound({ onResult, type }: Props) {
   const [extraNote, setExtraNote] = useState('')
+
+  // กันยิง onResult ซ้ำ/วนลูป
   const prevKeyRef = useRef<string>('')
+  const onResultRef = useRef(onResult)
+  useEffect(() => {
+    onResultRef.current = onResult
+  }, [onResult])
 
   useEffect(() => {
-    const trimmedNote = extraNote.trim()
+    const trimmed = extraNote.trim()
 
     const symptoms = ['avf_wound']
-    if (trimmedNote) symptoms.push('custom_note')
+    if (trimmed) symptoms.push('custom_note')
 
-    const note = trimmedNote || 'ติดตามแผล AVF'
-    const isReferCase = true
+    const note = trimmed || 'ติดตามแผล AVF'
     const clinic = ['surg']
+    const isReferCase = true
 
-    const resultKey = JSON.stringify({ note, clinic, symptoms, isReferCase })
-
-    if (prevKeyRef.current !== resultKey) {
-      prevKeyRef.current = resultKey
-
-      if (!trimmedNote && symptoms.length <= 1) {
-        onResult(null)
-        return
-      }
-
-      onResult({
+    const key = JSON.stringify({ clinic, note, symptoms, isReferCase, type })
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResultRef.current({
         question: 'AVFWoundFollowup',
         question_code: 18,
         question_title: 'แผลจากการทำ AVF (สำหรับผู้ป่วยล้างไต)',
@@ -55,23 +54,26 @@ export default function Question18_AVFWound({ onResult, type }: Props) {
         type,
       })
     }
-  }, [extraNote, onResult, type])
+  }, [extraNote, type])
 
   return (
-    <div className="space-y-4 text-sm text-gray-800">
+    <div className="text-sm text-gray-800 space-y-3">
+      {/* คำอธิบาย (ปล่อยให้ parent เป็นคนทำกรอบ/การ์ด) */}
       <p className="leading-relaxed">
-        แผลที่เกิดจากการผ่าตัดเส้นเลือดเพื่อทำการล้างไต (AVF - arteriovenous fistula)
+        แผลที่เกิดจากการผ่าตัดเส้นเลือดเพื่อทำการล้างไต
+        (AVF - arteriovenous fistula)
       </p>
 
-      <div>
-        <label htmlFor="extraNote" className="block font-medium mt-2">
+      {/* หมายเหตุเพิ่มเติม */}
+      <div className="space-y-1.5">
+        <label htmlFor="extraNote" className="block font-medium">
           หมายเหตุเพิ่มเติม (ถ้ามี)
         </label>
         <textarea
           id="extraNote"
           title="หมายเหตุเพิ่มเติม"
-          className="w-full border px-3 py-2 rounded"
-          rows={2}
+          className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          rows={3}
           value={extraNote}
           onChange={(e) => setExtraNote(e.target.value)}
           placeholder="ระบุรายละเอียดเพิ่มเติม เช่น แผลติดเชื้อ, บวม, ปวดแผล"

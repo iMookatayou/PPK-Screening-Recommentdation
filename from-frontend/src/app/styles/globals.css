@@ -1,3 +1,4 @@
+/* === Tailwind (ใช้แบบเดิมของคุณ) === */
 @import "tailwindcss/preflight"; /* ใช้แทน @tailwind base */
 @import "tailwindcss/utilities"; /* ใช้แทนทั้ง components และ utilities */
 @import "tailwindcss";
@@ -5,31 +6,28 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* === Fonts === */
 @font-face {
   font-family: 'Sarabun';
   src: url('/fonts/sarabun/Sarabun-Regular.woff2') format('truetype');
   font-weight: normal;
   font-style: normal;
 }
-
 @font-face {
   font-family: 'Sarabun';
   src: url('/fonts/sarabun/Sarabun-Bold.woff2') format('truetype');
   font-weight: bold;
 }
-
 @font-face {
   font-family: 'Sarabun';
   src: url('/fonts/sarabun/Sarabun-SemiBold.woff2') format('truetype');
   font-weight: 600;
 }
-
 @font-face {
   font-family: 'Poppins';
   src: url('/fonts/poppins/Poppins-Regular.ttf') format('truetype');
   font-weight: normal;
 }
-
 @font-face {
   font-family: 'Inter';
   src: url('/fonts/inter/Inter_18pt-Regular.ttf') format('truetype');
@@ -44,7 +42,7 @@ body {
   background-color: #f9f9f9;
 }
 
-/* --- THEME VARIABLES --- */
+/* === THEME VARIABLES === */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -77,7 +75,7 @@ body {
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* --- ROOT COLOR --- */
+/* === ROOT COLOR === */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -103,9 +101,16 @@ body {
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
+
+  /* === Z-INDEX SCALE กลาง ทั้งระบบ === */
+  --z-base: 1;
+  --z-sticky: 100;     /* topbar / sidebar */
+  --z-dropdown: 900;   /* เมนูย่อย */
+  --z-overlay: 10000;  /* modal/backdrop */
+  --z-toast: 11000;    /* toast/notification */
 }
 
-/* --- DARK THEME --- */
+/* === DARK THEME === */
 .dark {
   --background: oklch(0.13 0.028 261.692);
   --foreground: oklch(0.985 0.002 247.839);
@@ -132,83 +137,95 @@ body {
   --chart-5: oklch(0.645 0.246 16.439);
 }
 
-/* --- BASE STYLES --- */
+/* === BASE === */
 @layer base {
-  * {
-    @apply border-border outline-ring/50;
-  }
-  body {
-    @apply bg-background text-foreground;
-  }
+  * { @apply border-border outline-ring/50; }
+  body { @apply bg-background text-foreground; }
 }
 
-/* print-global.css หรือไฟล์ที่คุณใช้จัดการการพิมพ์ */
-/* src/app/print-form/print-global.css */
+/* === PRINT === */
 @media print {
-  /* ซ่อน Navbar และ Sidebar เมื่อพิมพ์ */
-  .navbar, .sidebar {
-    display: none;
-  }
-
-  /* ซ่อนปุ่มที่ไม่จำเป็นในการพิมพ์ */
-  .btn, .footer, .header {
-    display: none;
-  }
-
-  /* กำหนดการแสดงผลข้อมูลที่ต้องการพิมพ์ */
+  .navbar, .sidebar { display: none; }
+  .btn, .footer, .header { display: none; }
   body {
     font-family: 'Sarabun', 'Poppins', sans-serif;
-    font-size: 16px;
-    color: #1a1a1a;
-    background-color: #ffffff;
+    font-size: 16px; color: #1a1a1a; background-color: #ffffff;
   }
-
-  /* การแสดงผลตาราง */
-  table {
-    width: 100%;
-    border-collapse: collapse;
-  }
-
-  table th, table td {
-    padding: 8px;
-    text-align: left;
-    border: 1px solid #ddd;
-  }
+  table { width: 100%; border-collapse: collapse; }
+  table th, table td { padding: 8px; text-align: left; border: 1px solid #ddd; }
 }
 
+/* === Auth Loading === */
 .auth-loading-screen {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: white;
+  display: flex; justify-content: center; align-items: center;
+  height: 100vh; background: white;
 }
-
-.auth-loading-box {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
+.auth-loading-box { display: flex; flex-direction: column; align-items: center; }
 .auth-spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e5e7eb;
-  border-top: 4px solid #3b82f6;
-  border-radius: 50%;
-  margin-top: 20px;
-  animation: spin 1s linear infinite;
+  width: 40px; height: 40px; border: 4px solid #e5e7eb; border-top: 4px solid #3b82f6;
+  border-radius: 50%; margin-top: 20px; animation: spin 1s linear infinite;
+}
+.auth-loading-text { margin-top: 16px; font-size: 1rem; color: #4b5563; font-weight: 500; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ======================================================================
+   ========== LAYOUT & OVERLAY SYSTEM (ใช้ได้กับทุก popup) ==========
+   ====================================================================== */
+
+/* Topbar / Sidebar ควรอยู่ที่ z-index กลาง */
+.topbar { position: sticky; top: 0; z-index: var(--z-sticky); }
+.sidebar { position: sticky; top: 64px; z-index: var(--z-sticky); }
+
+/* ป้องกันการสร้าง stacking context โดยไม่ตั้งใจใน wrapper หลัก
+   (หลีกเลี่ยง transform/filter/opacity<1 ถ้าไม่จำเป็น) */
+.app-shell, .content { will-change: auto; }
+
+/* ===== Overlay / Modal Portal roots =====
+   ใส้ใน layout.tsx: <div id="overlay-root" /> <div id="toast-root" /> */
+#overlay-root, #toast-root {
+  position: relative;
+  z-index: var(--z-overlay);
 }
 
-.auth-loading-text {
-  margin-top: 16px;
-  font-size: 1rem;
-  color: #4b5563;
-  font-weight: 500;
+/* ===== Utilities ใช้กับทุก modal/backdrop ===== */
+.modal-open { overflow: hidden; } /* เพิ่ม/ลบบน <body> ตอนเปิด/ปิดโมดัล */
+
+.modal-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.35);
+  display: grid; place-items: center;
+  z-index: var(--z-overlay);
 }
 
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+.modal-card {
+  width: min(560px, 92vw);
+  background: #fff;
+  border-radius: 12px;
+  border: 1px solid #e5e7eb;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+  padding: 20px;
+}
+
+/* ปุ่มสไตล์ราชการเบา ๆ ที่ใช้บ่อย */
+.btn-ghost {
+  padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff;
+}
+.btn-danger {
+  padding: 8px 14px; border-radius: 8px; border: 0; background: #dc2626; color: #fff;
+}
+.btn-success {
+  padding: 8px 14px; border-radius: 8px; border: 0; background: #16a34a; color: #fff;
+}
+
+/* ===== Dropdown / Popover พิเศษ (เช่น react-select) ให้ลอยเหนือ layout ===== */
+.portal-layer {
+  position: absolute;
+  z-index: var(--z-dropdown);
+}
+
+/* ซ่อนทุกอย่างที่ติดคลาส global: no-print เฉพาะตอนพิมพ์ */
+@media print {
+  .no-print { display: none !important; }
+  /* กันเผื่อบางบราวเซอร์เรนเดอร์ปุ่ม/ไอคอนแยก */
+  .no-print * { display: none !important; }
 }

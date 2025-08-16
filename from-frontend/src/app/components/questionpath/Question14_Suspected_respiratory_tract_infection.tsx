@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import ReusablePopup from '@/app/components/ui/ReusablePopup'
+import { useEffect, useRef, useState } from 'react'
+import ReusablePopup from '@/app/components/ui/popup/ReusablePopup'
 import { PhoneCall } from 'lucide-react'
 
 export interface Question14Result {
@@ -11,8 +11,9 @@ export interface Question14Result {
   clinic: string[]
   note?: string
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
+  // isReferCase: ไม่มีช้อย refer → ไม่ต้องส่งฟิลด์นี้
+  // isReferCase?: boolean
 }
 
 interface Props {
@@ -26,64 +27,81 @@ export default function Question14_RespInfect({ onResult }: Props) {
   const [noteExtra, setNoteExtra] = useState('')
   const [showCallPopup, setShowCallPopup] = useState(false)
 
-  // คอยเช็คเงื่อนไขแล้วค่อยส่งผลลัพธ์
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+
+  const prevKeyRef = useRef<string>('__INIT__')
+
   useEffect(() => {
     if (!suspectDisease) {
-      onResult(null) // รีเซตเมื่อยังไม่ได้เลือก
+      if (prevKeyRef.current !== 'EMPTY') {
+        prevKeyRef.current = 'EMPTY'
+        onResultRef.current(null)
+      }
       return
     }
 
     const symptoms: string[] = ['resp_infect']
+    const noteParts: string[] = []
     let clinic: string[] = []
-    let note = ''
-    let isReferCase = false
 
     if (suspectDisease === 'pul_tb') {
       clinic = ['opd203']
       symptoms.push('pulmonary_tb')
-      note = 'มีกลุ่มอาการของ Pulmonary TB (ตามใบคัดกรอง) ที่ vital sign stable'
-      isReferCase = true
+      noteParts.push('มีกลุ่มอาการของ Pulmonary TB (vital sign stable)')
     }
 
     if (suspectDisease === 'infectious_disease') {
       clinic = ['opd203']
-      symptoms.push('covid', 'chickenpox', 'herpes_zoster', 'measle', 'rubella', 'hfm')
-      note =
-        'สงสัย COVID-19, Chickenpox, Herpes Zoster, Measles, Rubella, HFMD ที่ vital sign stable'
-      isReferCase = true
+      // สะกดแท็กให้สอดคล้อง
+      symptoms.push('covid', 'chickenpox', 'herpes_zoster', 'measles', 'rubella', 'hfmd')
+      noteParts.push('สงสัย COVID-19 / Chickenpox / Herpes Zoster / Measles / Rubella / HFMD (vital sign stable)')
     }
 
     if (suspectDisease === 'important_symptom') {
       if (!hasCalledOPD || !customClinic) {
-        onResult(null) // ยังเลือกไม่ครบ
+        const waitingKey = JSON.stringify({ WAIT_IMPORTANT: true, hasCalledOPD, customClinic })
+        if (prevKeyRef.current !== waitingKey) {
+          prevKeyRef.current = waitingKey
+          onResultRef.current(null)
+        }
         return
       }
       clinic = [customClinic]
-      note = `อาการสำคัญ (vital sign stable) ส่งคลินิก: ${customClinic}`
-      isReferCase = true
+      noteParts.push('อาการสำคัญ (vital sign stable)')
     }
 
-    if (noteExtra.trim()) {
-      note += ` | ${noteExtra.trim()}`
+    const extra = noteExtra.trim()
+    if (extra) {
+      noteParts.push(extra)
+      symptoms.push('resp_infect_note')
     }
 
-    onResult({
+    const finalNote = noteParts.join(' | ') || undefined
+
+    const payload: Question14Result = {
       question: 'RespInfect',
       question_code: 14,
       question_title: 'สงสัยโรคติดเชื้อทางเดินหายใจ',
       clinic,
-      note,
+      note: finalNote,
       symptoms,
-      isReferCase,
       routedBy: 'auto',
-    })
+    }
+
+    const key = JSON.stringify(payload)
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResultRef.current(payload)
+    }
   }, [suspectDisease, hasCalledOPD, customClinic, noteExtra])
+  // ถ้า component นี้มี prop `type` ในอนาคต ให้ใส่ไว้ใน deps ด้วย เช่น [..., type]
 
   return (
     <div className="space-y-4 text-sm">
       <div>
         <label htmlFor="suspectDisease" className="block font-medium">
-          สงสัยโรคติดเชื้อทางเดินหายใจหรือไม่:
+          สงสัยโรคติดเชื้อทางเดินหายใจหรือไม่
         </label>
         <select
           id="suspectDisease"
@@ -94,9 +112,7 @@ export default function Question14_RespInfect({ onResult }: Props) {
             setSuspectDisease(value)
             setHasCalledOPD(false)
             setCustomClinic('')
-            if (value === 'important_symptom') {
-              setShowCallPopup(true)
-            }
+            if (value === 'important_symptom') setShowCallPopup(true)
           }}
           className="w-full border px-3 py-2 rounded mt-1"
         >

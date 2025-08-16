@@ -11,7 +11,7 @@ import allQuestionsRaw from '@/app/components/questionpath/allQuestions'
 import { getTitle } from '@/app/components/utils/getTitle'
 
 import styles from './styles/Erdsppk.module.css'
-import { useToast } from '@/app/components/ui/ToastProvider'
+import { useToast } from '@/app/components/ui/popup/ToastProvider'
 import { authAxios } from '@/lib/axios'
 
 // ---------- Types เฉพาะงาน "แนะนำห้องตรวจ" ----------
@@ -20,6 +20,7 @@ type IncomingResult = {
   symptoms?: string[] | string
   note?: string
   is_refer_case?: boolean
+  isReferCase?: boolean          
   answers?: Record<string, any>
 }
 
@@ -46,20 +47,42 @@ function normalizeGuideResult(r: IncomingResult): GuideResult {
     ? [String(r.symptoms)]
     : []
 
+  const isRefer =
+    (r as any).is_refer_case ??
+    (r as any).isReferCase ??
+    (r as any).isRefer ??
+    (r as any).refer ??
+    false
+
   return {
     clinic,
     symptoms,
     note: r.note ?? '',
-    is_refer_case: !!r.is_refer_case,
+    is_refer_case: !!isRefer,  // เก็บเป็น snake_case เสมอ
     answers: r.answers ?? {},
     type: 'guide',
   }
 }
 
+// helper: ดึงข้อความ error จาก backend (422)
+function extractErrors(err: any): string {
+  const msg = err?.response?.data?.message || err?.message
+  const errors = err?.response?.data?.errors
+  if (errors && typeof errors === 'object') {
+    const lines: string[] = []
+    Object.entries(errors).forEach(([field, arr]) => {
+      const texts = Array.isArray(arr) ? arr : [String(arr)]
+      texts.forEach((t) => lines.push(`${field}: ${t}`))
+    })
+    if (lines.length) return lines.join('\n')
+  }
+  return msg || 'เกิดข้อผิดพลาด'
+}
+
 export default function ReferralSystem() {
   const Questions = allQuestionsRaw as Record<
     string,
-    React.ComponentType<{ onResult: (result: IncomingResult) => void; type?: string }>
+    React.ComponentType<{ onResult: (result: IncomingResult | null) => void; type?: string }>
   >
 
   const [selectedQuestions, setSelectedQuestions] = useState<string[]>([])
@@ -84,7 +107,6 @@ export default function ReferralSystem() {
   const handleSave = async () => {
     if (saving) return
 
-    // ✅ validate เฉพาะสิ่งที่ต้องใช้จริง
     if (selectedQuestions.length === 0) {
       addToast({
         type: 'error',
@@ -106,17 +128,27 @@ export default function ReferralSystem() {
       return
     }
 
+    // ตรวจทุก result ว่ามี clinic อย่างน้อย 1 ค่า (ตรงกับ validation backend)
+    const invalid = Object.entries(questionResults).find(
+      ([, r]) => !Array.isArray(r.clinic) || r.clinic.length === 0
+    )
+    if (invalid) {
+      addToast({
+        type: 'error',
+        icon: <AlertCircle size={20} />,
+        message: 'คำถามบางข้อยังไม่ได้เลือกห้องตรวจ (clinic)',
+        position: 'top-right',
+      })
+      return
+    }
+
     setSaving(true)
     try {
-      // ใครเป็นผู้บันทึก (ดึงจาก /me)
-      const meRes = await authAxios.get('/me')
-      const me = meRes.data || {}
-      const routedBy: string = me.display_name || me.username || me.name || 'anonymous'
-
-      const now = new Date().toISOString()
-      const patientId = 'anonymous-' + uuidv4() // ระบบนี้ไม่ได้ผูกกับบัตร → ใส่ anonymous
+      // ไม่ต้องดึง /me แล้วส่ง routed_by; backend จะตั้ง created_by เองจาก user token
+      const patientId = 'anonymous-' + uuidv4() // ไม่ได้ผูกกับบัตร → ใส่ anonymous เฉยๆ (ไม่ส่งไป backend)
 
       // แปลงผลคำถามเป็น shape สำหรับบันทึก
+      // NOTE: ไม่ส่ง created_at ไป ปล่อยให้ backend ใส่เอง (เลี่ยง 422 date_format)
       const resultsToSave = Object.entries(questionResults).map(([key, result], index) => ({
         question: key,
         question_code: index + 1,
@@ -124,20 +156,22 @@ export default function ReferralSystem() {
         clinic: result.clinic,        // array เสมอ
         symptoms: result.symptoms,    // array เสมอ
         note: result.note || '',
-        is_refer_case: result.is_refer_case ?? false,
-        type: 'guide',
-        routed_by: routedBy,
-        created_at: now,
-        answers: result.answers ?? {},
+        is_refer_case: !!result.is_refer_case,
+        type: 'guide',                
+        // ไม่ต้องส่ง routed_by / created_at
+        // answers: result.answers // (ไม่อยู่ใน schema/validation ฝั่ง server อยู่แล้ว)
       }))
 
       const summaryClinics = [...new Set(resultsToSave.flatMap((r) => r.clinic))]
       const summarySymptoms = [...new Set(resultsToSave.flatMap((r) => r.symptoms))]
 
       const payload = {
+        // ฝั่ง backend ไม่ได้ใช้ ฟิลด์พวกนี้จะถูกเมินได้ แต่เก็บไว้เผื่ออนาคต
         patient_id: patientId,
         selected_questions: selectedQuestions,
+
         question_results: resultsToSave,
+        // ส่วนสรุปไม่ได้ใช้โดย endpoint นี้ แต่เผื่ออยากเก็บไว้ client
         summary_clinics: summaryClinics,
         summary_symptoms: summarySymptoms,
       }
@@ -150,12 +184,15 @@ export default function ReferralSystem() {
         message: 'บันทึกคำแนะนำสำเร็จ',
         position: 'top-right',
       })
-    } catch (err: unknown) {
-      const error = err as Error
+
+      // เคลียร์สถานะหลังบันทึกสำเร็จ (ตามต้องการ)
+      setSelectedQuestions([])
+      setQuestionResults({})
+    } catch (err: any) {
       addToast({
         type: 'error',
         icon: <AlertCircle size={20} />,
-        message: error?.message || 'เกิดข้อผิดพลาด',
+        message: extractErrors(err),
         position: 'top-right',
       })
     } finally {
@@ -189,7 +226,6 @@ export default function ReferralSystem() {
         </div>
 
         <div className={styles['question-select-box']}>
-          <label className={styles['question-label']}>เลือกคำถามคัดกรอง</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <Search style={{ width: 20, height: 20, color: '#6b7280' }} />
             <div style={{ flex: 1 }}>
@@ -228,23 +264,23 @@ export default function ReferralSystem() {
                   <div className={styles['question-title']}>{getTitleFromKey(key)}</div>
                   <div className={styles['question-body']}>
                     <QuestionComponent
-                        type="guide"
-                        onResult={(res: IncomingResult | null) => {
-                          if (!res) {
-                            // ถ้า res เป็น null → ลบออกจากผล
-                            setQuestionResults((prev) => {
-                              const { [key]: _, ...rest } = prev
-                              return rest
-                            })
-                          } else {
-                            // ถ้า res มีค่า → normalize ตามปกติ
-                            setQuestionResults((prev) => ({
-                              ...prev,
-                              [key]: normalizeGuideResult(res),
-                            }))
-                          }
-                        }}
-                      />
+                      type="guide"
+                      onResult={(res: IncomingResult | null) => {
+                        if (!res) {
+                          // ถ้า res เป็น null → ลบออกจากผล
+                          setQuestionResults((prev) => {
+                            const { [key]: _, ...rest } = prev
+                            return rest
+                          })
+                        } else {
+                          // ถ้า res มีค่า → normalize ตามปกติ
+                          setQuestionResults((prev) => ({
+                            ...prev,
+                            [key]: normalizeGuideResult(res),
+                          }))
+                        }
+                      }}
+                    />
                   </div>
                 </motion.div>
               )
@@ -275,7 +311,7 @@ export default function ReferralSystem() {
                 <li key={key} className={styles['referral-item']}>
                   <Hospital className={styles['referral-icon-hospital']} />
                   <span className={styles['referral-item-label']}>{getTitleFromKey(key)}:</span>
-                   <span className={styles['referral-item-value']}>
+                  <span className={styles['referral-item-value']}>
                     {Array.isArray(result.clinic) && result.clinic.length > 0
                       ? result.clinic.map((c) => clinicLabelMap[c] ?? c).join(', ')
                       : 'ไม่ระบุ'}
@@ -285,7 +321,11 @@ export default function ReferralSystem() {
             </ul>
 
             <div className="text-center mt-4">
-              <button className={styles['btn-confirm']} onClick={handleSave} disabled={saving}>
+              <button
+                className={styles['btn-confirm']}
+                onClick={handleSave}
+                disabled={saving || Object.keys(questionResults).length === 0}
+              >
                 {saving ? 'กำลังบันทึก...' : 'ยืนยันผลการแนะนำ'}
               </button>
             </div>

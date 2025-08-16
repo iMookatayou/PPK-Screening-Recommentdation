@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { PhoneCall, AlertTriangle } from 'lucide-react'
-import ReusablePopup from '@/app/components/ui/ReusablePopup'
+import ReusablePopup from '@/app/components/ui/popup/ReusablePopup'
 
 export interface Question12Result {
   question: string
@@ -27,80 +27,91 @@ export default function Question12_Pregnancy({
   type,
 }: Question12Props) {
   const [gestWeek, setGestWeek] = useState<number | ''>('')
-  const [symptom, setSymptom] = useState<string>('')
-  const [extraNote, setExtraNote] = useState<string>('')
-  const [painScale, setPainScale] = useState<number>(3)
+  const [symptom, setSymptom] = useState('')
+  const [extraNote, setExtraNote] = useState('')
+  const [painScale, setPainScale] = useState(3)
+  const [isManualRefer, setIsManualRefer] = useState(false)
 
-  const [isManualRefer, setIsManualRefer] = useState<boolean>(false)
-  const [showPopup, setShowPopup] = useState(false)
-  const [showManualReferPopup, setShowManualReferPopup] = useState(false)
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
 
-  const shownPopupOnceRef = useRef(false)
   const prevKeyRef = useRef('')
   const [hasTouched, setHasTouched] = useState(false)
 
+  // ===== POPUP STATES =====
+  const [showLRPopup, setShowLRPopup] = useState(false)
+  const [showManualPopup, setShowManualPopup] = useState(false)
+
+  const week = gestWeek === '' ? 0 : Number(gestWeek)
+
+  // เงื่อนไขที่ควรแจ้งให้ไป LR (แต่ไม่ทำให้เป็น refer case อัตโนมัติ)
+  const isLRCondition =
+    (symptom === 'pain_pregnancy' && week >= 22) || symptom === 'preeclampsia'
+
+  // เด้งเมื่อเข้าเงื่อนไข LR
   useEffect(() => {
+    if (isLRCondition) setShowLRPopup(true)
+  }, [isLRCondition, symptom, week])
+
+  // เด้งเมื่อเลือก Manual refer
+  useEffect(() => {
+    if (isManualRefer) setShowManualPopup(true)
+  }, [isManualRefer])
+
+  // ===== ส่งผลลัพธ์ขึ้นพาเรนต์ =====
+  useEffect(() => {
+    // ยังไม่เลือกอาการ → ส่ง null
     if (!symptom) {
-      if (hasTouched) onResult(null)
+      if (hasTouched) onResultRef.current(null)
       return
     }
 
-    let isReferCase = false
+    // เริ่มต้นค่าพื้นฐาน
     let clinic = ''
     const noteParts: string[] = []
-    const week = gestWeek === '' ? 0 : Number(gestWeek)
-    const symptoms = ['pregnancy', symptom]
+    const symptoms: string[] = ['pregnancy', symptom]
 
+    // อายุครรภ์ (เมื่อกรอก)
     if (gestWeek !== '') noteParts.push(`อายุครรภ์: ${week} สัปดาห์`)
 
-    if (symptom === 'appendicitis') {
-      noteParts.push(`ระดับความเจ็บปวด: ${painScale}/10`)
-    }
-
+    // Routing ตามอาการ (ไม่แตะ isReferCase ที่นี่)
     switch (symptom) {
-      case 'pain_pregnancy':
+      case 'pain_pregnancy': {
         if (week >= 22) {
           clinic = 'lr'
-          noteParts.push(`ปวดครรภ์ ≥ ${week} สัปดาห์`)
+          noteParts.push('ปวดครรภ์ ≥ 22 สัปดาห์')
           symptoms.push('gest_22_up')
-          isReferCase = true
-          if (!shownPopupOnceRef.current) {
-            setShowPopup(true)
-            shownPopupOnceRef.current = true
-          }
         } else {
           clinic = 'anc'
-          noteParts.push(`ปวดครรภ์ < ${week} สัปดาห์`)
+          noteParts.push('ปวดครรภ์ < 22 สัปดาห์')
           symptoms.push('gest_under_22')
-          shownPopupOnceRef.current = false
         }
         break
-      case 'ectopic':
+      }
+      case 'ectopic': {
         clinic = 'obgy'
         noteParts.push('สงสัย Ectopic pregnancy (VS stable)')
-        isReferCase = true
         break
-      case 'bleeding_abortion':
+      }
+      case 'bleeding_abortion': {
         clinic = 'obgy'
         noteParts.push('Bleeding per vagina R/O abortion (VS stable)')
-        isReferCase = true
         break
-      case 'preeclampsia':
+      }
+      case 'preeclampsia': {
         clinic = 'lr'
         noteParts.push('Preeclampsia (BP ≥ 140/90 + อาการแทรกซ้อน)')
-        isReferCase = true
-        if (!shownPopupOnceRef.current) {
-          setShowPopup(true)
-          shownPopupOnceRef.current = true
-        }
         break
-      case 'appendicitis':
+      }
+      case 'appendicitis': {
         clinic = 'er'
         noteParts.push('ปวดท้องสงสัยไส้ติ่ง')
-        symptoms.push('appendicitis')
-        isReferCase = true
+        // pain scale tags
+        symptoms.push('appendicitis', 'pain_scale', `pain_scale_${painScale}`)
+        noteParts.push(`ระดับความเจ็บปวด: ${painScale}/7`)
         break
-      case 'uti_etc':
+      }
+      case 'uti_etc': {
         if (isANC) {
           clinic = 'anc'
           noteParts.push('ANC เดิม มีอาการไม่รุนแรง (UTI, URI, dyspepsia)')
@@ -111,31 +122,41 @@ export default function Question12_Pregnancy({
           symptoms.push('no_anc')
         }
         break
+      }
     }
-    
+
+    // Checkbox Case refer เท่านั้นที่ทำให้เป็น refer case
+    let isReferCase = false
     if (isManualRefer) {
       isReferCase = true
+      if (!symptoms.includes('manual_refer')) symptoms.push('manual_refer')
       if (!clinic) {
         clinic = 'obgy'
         noteParts.push('เลือก Refer manual: ส่งนรีเวช')
       }
     }
 
-    if (extraNote.trim()) {
-      noteParts.push(extraNote.trim())
+    // หมายเหตุเพิ่มเติม
+    const extra = extraNote.trim()
+    if (extra) {
+      noteParts.push(extra)
+      if (!symptoms.includes('pregnancy_note')) symptoms.push('pregnancy_note')
     }
 
+    // กันกรณียังไม่มี clinic จากการเลือกไม่ครบ
     if (!clinic) {
-      onResult(null)
+      onResultRef.current(null)
       return
     }
 
     const note = noteParts.join(' | ')
-    const key = `${symptom}-${week}-${painScale}-${extraNote}-${isManualRefer}`
+    const key = JSON.stringify({
+      symptom, week, painScale, extra, isManualRefer, clinic, isReferCase, symptoms, type
+    })
 
     if (prevKeyRef.current !== key) {
       prevKeyRef.current = key
-      onResult({
+      onResultRef.current({
         question: 'PregnancyCase',
         question_code: 12,
         question_title: 'หญิงตั้งครรภ์ที่มีอาการ',
@@ -146,13 +167,14 @@ export default function Question12_Pregnancy({
         type,
       })
     }
-  }, [gestWeek, symptom, extraNote, isManualRefer, painScale, type])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gestWeek, symptom, extraNote, isManualRefer, painScale, type, hasTouched])
 
   return (
     <div className="space-y-4 text-sm">
       <div>
         <label htmlFor="gestWeek" className="block font-medium">
-          อายุครรภ์ (สัปดาห์):
+          อายุครรภ์ (สัปดาห์)
         </label>
         <input
           id="gestWeek"
@@ -175,7 +197,6 @@ export default function Question12_Pregnancy({
           onChange={(e) => {
             setSymptom(e.target.value)
             setHasTouched(true)
-            shownPopupOnceRef.current = false
             setPainScale(3)
           }}
         >
@@ -205,9 +226,7 @@ export default function Question12_Pregnancy({
             className="w-full"
           />
           <div className="flex justify-between text-xs text-gray-500 px-1 mt-1">
-            {[1, 2, 3, 4, 5, 6, 7].map((n) => (
-              <span key={n}>{n}</span>
-            ))}
+            {[1,2,3,4,5,6,7].map(n => <span key={n}>{n}</span>)}
           </div>
           <div className="text-center text-sm text-gray-700 mt-1">
             ระดับ: <strong>{painScale}</strong>
@@ -234,34 +253,28 @@ export default function Question12_Pregnancy({
           type="checkbox"
           id="manualRefer"
           checked={isManualRefer}
-          onChange={(e) => {
-            const checked = e.target.checked
-            setIsManualRefer(checked)
-            if (checked) {
-              setShowManualReferPopup(true)
-            }
-          }}
+          onChange={(e) => setIsManualRefer(e.target.checked)}
         />
-        <label htmlFor="manualRefer">
-          Case refer (ต้องโทร consult แพทย์เวรสูติก่อน)
-        </label>
+        <label htmlFor="manualRefer">Case refer (ต้องโทร consult แพทย์เวรสูติก่อน)</label>
       </div>
 
+      {/* POPUPS */}
       <ReusablePopup
-        isOpen={showPopup}
-        onClose={() => setShowPopup(false)}
-        title="โปรดแจ้งพนักงานเปล"
-        message="ต้องส่งต่อไปยัง LR กรุณาแจ้งพนักงานเปลให้เซ็นรับการนำส่งด่วน"
-        icon={<AlertTriangle className="w-6 h-6 animate-ping" />}
+        isOpen={showLRPopup}
+        onClose={() => setShowLRPopup(false)}
+        title="ต้องส่งไป LR ด่วน"
+        message="อาการเข้าเกณฑ์ห้องคลอด (LR) กรุณาแจ้งพนักงานเปลให้เซ็นรับการนำส่งด่วน"
+        icon={<AlertTriangle className="w-6 h-6" />}
         color="red"
+        confirmText="รับทราบ"
       />
 
       <ReusablePopup
-        isOpen={showManualReferPopup}
-        onClose={() => setShowManualReferPopup(false)}
-        title="โปรดโทร consult แพทย์เวรสูติก่อน"
-        message="เคส Refer นี้จำเป็นต้องโทรแจ้งและปรึกษาแพทย์เวรสูติตามตารางเวร"
-        icon={<PhoneCall className="w-6 h-6 animate-pulse" />}
+        isOpen={showManualPopup}
+        onClose={() => setShowManualPopup(false)}
+        title="กรุณาโทร consult แพทย์เวรสูติ"
+        message="เคส Refer ต้องโทรแจ้งและปรึกษาแพทย์เวรสูติตามตารางเวร"
+        icon={<PhoneCall className="w-6 h-6" />}
         color="yellow"
         confirmText="เข้าใจแล้ว"
       />

@@ -2,70 +2,117 @@
 
 import React, { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { clinicLabelMap } from '@/app/components/questionpath/clinicLabelMap'
-import { getTitle } from '@/app/components/utils/getTitle'
 import styles from './styles/PrintSummary.module.css'
-import { AlertTriangle, ArrowLeft, Printer } from 'lucide-react'
+import { ArrowLeft, Printer } from 'lucide-react'
+
+type PrintSummaryData = {
+  patientName: string
+  printedAt: string
+  routedBy: string
+  rightsNote: string
+  diseases?: string[]
+  topics: Array<{ code: string; title: string; note: string }>
+  referredClinics?: Array<string | { label?: string; name?: string; text?: string }>
+}
+
+const DEFAULT_DATA: PrintSummaryData = {
+  patientName: '',
+  printedAt: '',
+  routedBy: '',
+  rightsNote: '',
+  diseases: [],
+  topics: [],
+  referredClinics: [],
+}
+
+// ใช้ clinicLabelMap เพื่อแปลงรหัส → ชื่อเต็ม
+const clinicLabelMap: Record<string, string> = {
+  surg: 'OPD ศัลย์',
+  ortho: 'OPD Ortho',
+  muang: 'รพ.เมือง',
+  er: 'ER',
+  ent: 'OPD ENT',
+  uro: 'OPD URO ศัลย์',
+  obgy: 'OPD นรีเวท',
+  med: 'OPD MED',
+  nite: 'นิติเวช',
+  lr: 'LR',
+  anc: 'OPD ANC',
+  psych: 'OPD จิตเวช',
+  opd203: 'OPD 203',
+  dental: 'OPD ทันตกรรม',
+  plastic: 'OPD ศัลย์ตกแต่ง',
+  occmed: 'อาชีวเวชกรรม',
+  ped: 'OPD กุมารเวชกรรม',
+}
+
+// ดึง label และแปลงด้วย clinicLabelMap
+function extractClinicLabels(
+  items?: Array<string | { label?: string; name?: string; text?: string }>
+): string[] {
+  if (!Array.isArray(items)) return []
+  const labels = items
+    .map((it) => {
+      const raw =
+        typeof it === 'string'
+          ? it.trim()
+          : (it.label || it.name || it.text || '').toString().trim()
+      return clinicLabelMap[raw] || raw
+    })
+    .filter(Boolean)
+  return Array.from(new Set(labels))
+}
 
 export default function PrintFormPage() {
-  const [answers, setAnswers] = useState<Record<number, any>>({})
-  const [summary, setSummary] = useState<any>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [data, setData] = useState<PrintSummaryData>(DEFAULT_DATA)
   const router = useRouter()
 
   useEffect(() => {
-    const storedAnswers = localStorage.getItem('answers')
-    const storedSummary = localStorage.getItem('patientSummary')
-
-    if (storedAnswers) {
-      setAnswers(JSON.parse(storedAnswers))
+    try {
+      const raw = localStorage.getItem('printSummary')
+      if (raw) {
+        const parsed = JSON.parse(raw) as Partial<PrintSummaryData>
+        setData({
+          patientName: parsed.patientName ?? DEFAULT_DATA.patientName,
+          printedAt: parsed.printedAt ?? new Date().toISOString(),
+          routedBy: parsed.routedBy ?? DEFAULT_DATA.routedBy,
+          rightsNote: parsed.rightsNote ?? DEFAULT_DATA.rightsNote,
+          diseases: Array.isArray(parsed.diseases) ? parsed.diseases : [],
+          topics: Array.isArray(parsed.topics) ? parsed.topics : [],
+          referredClinics: Array.isArray(parsed.referredClinics) ? parsed.referredClinics : [],
+        })
+      } else {
+        setData(DEFAULT_DATA)
+      }
+    } catch {
+      setData(DEFAULT_DATA)
     }
-
-    if (storedSummary) {
-      setSummary(JSON.parse(storedSummary))
-    }
-
-    setIsLoading(false)
   }, [])
 
-  const getAgeFromBirthDate = (birthDate?: string): string => {
-    if (!birthDate || birthDate.length < 8) return 'ไม่ระบุ'
-    const y = parseInt(birthDate.substring(0, 4), 10)
-    const yearCE = y > 2500 ? y - 543 : y
-    const m = parseInt(birthDate.substring(4, 6), 10) - 1
-    const d = parseInt(birthDate.substring(6, 8), 10)
-    const birth = new Date(yearCE, m, d)
-    const today = new Date()
-    let age = today.getFullYear() - birth.getFullYear()
-    if (
-      today.getMonth() < birth.getMonth() ||
-      (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())
-    ) age--
-    return isNaN(age) ? 'ไม่ระบุ' : age.toString()
-  }
+  const rightsDisplay =
+    data.rightsNote && data.rightsNote.trim() ? data.rightsNote : 'ไม่มีการบันทึกสิทธิการรักษา'
 
-  const getPrintedDateTime = (): string => {
+  const clinicList = extractClinicLabels(data.referredClinics)
+
+  const nowTH = () => {
     const now = new Date()
-    const day = now.getDate().toString().padStart(2, '0')
-    const month = (now.getMonth() + 1).toString().padStart(2, '0')
-    const year = now.getFullYear() + 543
-    const hours = now.getHours().toString().padStart(2, '0')
-    const minutes = now.getMinutes().toString().padStart(2, '0')
-    return `${day}/${month}/${year} เวลา ${hours}:${minutes} น.`
+    const dd = String(now.getDate()).padStart(2, '0')
+    const mm = String(now.getMonth() + 1).padStart(2, '0')
+    const yy = now.getFullYear() + 543
+    const hh = String(now.getHours()).padStart(2, '0')
+    const mi = String(now.getMinutes()).padStart(2, '0')
+    return `${dd}/${mm}/${yy} เวลา ${hh}:${mi} น.`
   }
 
   const handlePrint = () => window.print()
-
   const handleGoBack = () => {
-    localStorage.removeItem('answers')
-    localStorage.removeItem('patientSummary')
+    localStorage.removeItem('printSummary')
     router.push('/formppk')
   }
 
-  if (isLoading) return null
-
   return (
     <div className={styles.wrapper}>
+      {/* Header */}
       <div className={styles.header}>
         <img src="/images/logoppk4.png" alt="โลโก้โรงพยาบาล" className={styles.logo} />
         <div className={styles.headerTextBox}>
@@ -76,63 +123,63 @@ export default function PrintFormPage() {
         </div>
       </div>
 
-      {!summary ? (
-        <p className={styles.alert}>
-          <AlertTriangle size={20} style={{ marginRight: 8 }} />
-          ไม่พบข้อมูลผู้ป่วย — กรุณากรอกฟอร์มก่อน หรือดำเนินการต่อด้วยข้อมูลใหม่
+      {/* Patient info */}
+      <div className={styles.patientInfo}>
+        <p>
+          <strong>ชื่อ-นามสกุล:</strong>{' '}
+          {data.patientName && data.patientName.trim() ? data.patientName : '___________'}
         </p>
-      ) : (
-        <div className={styles.patientInfo}>
-          <p><strong>ชื่อ-นามสกุล:</strong> {summary.titleNameTh} {summary.firstNameTh} {summary.lastNameTh}</p>
-          <p><strong>เพศ:</strong> {summary.gender === '1' ? 'ชาย' : summary.gender === '2' ? 'หญิง' : 'ไม่ระบุ'}</p>
-          <p><strong>อายุ:</strong> {getAgeFromBirthDate(summary.birthDate)} ปี</p>
-          <p><strong>สิทธิการรักษา:</strong> {summary.maininscl_name || 'ไม่ระบุ'}</p>
-        </div>
-      )}
+        <p>
+          <strong>สิทธิการรักษา:</strong> {rightsDisplay}
+        </p>
+      </div>
 
+      {/* Table */}
       <table className={styles.table}>
         <thead>
           <tr>
-            <th>ข้อ</th>
-            <th>คำถาม</th>
+            <th style={{ width: 60 }}>ข้อ</th>
+            <th>คำถาม / โรค</th>
             <th>รายละเอียด</th>
-            <th>ห้องตรวจ</th>
           </tr>
         </thead>
         <tbody>
-          {Object.entries(answers).length === 0 ? (
+          {data.topics.length === 0 ? (
             <tr>
-              <td colSpan={4} style={{ textAlign: 'center' }}>ไม่มีคำตอบในแบบฟอร์ม</td>
+              <td colSpan={3} style={{ textAlign: 'center', color: '#999' }}>— ยังไม่มีข้อมูล —</td>
             </tr>
           ) : (
-            Object.entries(answers).map(([key, data]) => {
-              const code = parseInt(key)
-              const title = getTitle(code)
-              const note = data.note || '—'
-              const clinic = clinicLabelMap[data.clinic] || data.clinic || 'ไม่ระบุ'
-              return (
-                <tr key={key}>
-                  <td>{code}</td>
-                  <td className={styles.questionTitle}>{title}</td>
-                  <td>{note}</td>
-                  <td>{clinic}</td>
-                </tr>
-              )
-            })
+            data.topics.map((t, idx) => (
+              <tr key={`${t.code}-${idx}`}>
+                <td>{idx + 1}</td>
+                <td className={styles.questionTitle}>{t.title}</td>
+                <td>{t.note || '-'}</td>
+              </tr>
+            ))
           )}
         </tbody>
       </table>
 
+      {/* ห้องตรวจที่เกี่ยวข้อง */}
+      {clinicList.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <strong>หมายเหตุ:</strong> ห้องตรวจที่เกี่ยวข้อง — {clinicList.join(', ')}
+        </div>
+      )}
+
+      {/* Footer */}
       <div className={styles.footer}>
-        <p>ลงชื่อแพทย์ผู้ตรวจ: ...............................................................</p>
-        <p>วันที่: {getPrintedDateTime()}</p>
-        <div className={styles.buttonGroup}>
-          <button onClick={handlePrint}>
-            <Printer size={16} style={{ marginRight: 6 }} />
+        <p>ลงชื่อผู้คัดกรอง: ...............................................................</p>
+        <p>วันที่: {nowTH()}</p>
+
+        {/* ปุ่มเห็นบนจอ แต่จะถูกซ่อนตอนสั่งพิมพ์ */}
+        <div className={`${styles.buttonGroup} no-print`}>
+          <button className={styles.btn} onClick={handlePrint}>
+            <Printer size={16} className={styles.icon} />
             พิมพ์แบบฟอร์ม
           </button>
-          <button onClick={handleGoBack}>
-            <ArrowLeft size={16} style={{ marginRight: 6 }} />
+          <button className={styles.btn} onClick={handleGoBack}>
+            <ArrowLeft size={16} className={styles.icon} />
             กลับไปหน้าฟอร์ม
           </button>
         </div>

@@ -9,12 +9,19 @@ import { User, KeyRound, Eye, EyeOff, CheckCircle } from 'lucide-react';
 import AnimatedLogo from '@/app/animatorlogo/AnimatedLogo';
 import { motion } from 'framer-motion';
 import { useAuth } from '@/app/context/AuthContext';
-import { useToast } from '../components/ui/ToastProvider';
+import { useToast } from '../components/ui/popup/ToastProvider';
+
+import ReusablePopup from '@/app/components/ui/popup/ReusablePopup';
+import {
+  makeUserStatusPopupMapper,
+  createDefaultPopupActionRunner,
+  type ApiResponse,
+} from '@/app/components/ui/popup/userStatusPopupMapper';
 
 export default function LoginPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { isAuthenticated, login } = useAuth();
+  const { isAuthenticated, login, logout } = useAuth(); 
 
   const [cid, setCid] = useState('');
   const [password, setPassword] = useState('');
@@ -27,6 +34,12 @@ export default function LoginPage() {
   const { addToast } = useToast();
   const shownToastRef = useRef(false);
   const isLoggingIn = useRef(false);
+
+  const [popupOpen, setPopupOpen] = useState(false);
+  const [popupProps, setPopupProps] = useState<any>(null);
+
+  const runAction = createDefaultPopupActionRunner((url) => router.push(url), logout);
+  const mapToPopup = makeUserStatusPopupMapper(runAction);
 
   // already logged in → ไปหน้าหลักงาน
   useEffect(() => {
@@ -82,8 +95,28 @@ export default function LoginPage() {
       setTimeout(() => setFadeOut(true), 1600);
       setTimeout(() => router.push('/erdsppk'), 2000);
     } catch (err: any) {
-      const code = err?.response?.data?.code;
-      const msg = err?.response?.data?.message;
+      const httpStatus = err?.response?.status;
+      const code = err?.response?.data?.code as string | undefined;
+      const msg = err?.response?.data?.message as string | undefined;
+
+      if (httpStatus === 422 && err?.response?.data?.errors) {
+        const errors = err.response.data.errors as Record<string, string[]>;
+        const firstMsg = Object.values(errors)[0]?.[0];
+        setError(firstMsg || 'ข้อมูลไม่ถูกต้อง');
+        setLoading(false);
+        isLoggingIn.current = false;
+        return;
+      }
+
+      if (httpStatus === 429 && code === 'RATE_LIMIT') {
+        const retry = err?.response?.data?.retry_after;
+        const txt = retry ? `พยายามเข้าสู่ระบบบ่อยเกินไป กรุณาลองใหม่ใน ${retry} วินาที` : (msg || 'ลองใหม่ภายหลัง');
+        setError(txt);
+        addToast({ type: 'warning', message: txt, position: 'top-right' });
+        setLoading(false);
+        isLoggingIn.current = false;
+        return;
+      }
 
       if (code === 'PENDING') {
         setError('บัญชีกำลังรออนุมัติจากผู้ดูแลระบบ');
@@ -91,9 +124,17 @@ export default function LoginPage() {
       } else if (code === 'REJECTED') {
         setError('บัญชีถูกปฏิเสธการอนุมัติ');
         addToast({ type: 'error', message: 'บัญชีถูกปฏิเสธการอนุมัติ', position: 'top-right' });
+      } else if (code && err?.response?.data?.message) {
+
+        const apiPayload = err.response.data as ApiResponse;
+        const mapped = mapToPopup(apiPayload);
+        setPopupProps(mapped);
+        setPopupOpen(true);
       } else {
-        setError(msg || 'เข้าสู่ระบบล้มเหลว');
-        addToast({ type: 'error', message: msg || 'เข้าสู่ระบบล้มเหลว', position: 'top-right' });
+        // fallback ทั่วไป
+        const fallback = msg || 'เข้าสู่ระบบล้มเหลว';
+        setError(fallback);
+        addToast({ type: 'error', message: fallback, position: 'top-right' });
       }
     } finally {
       isLoggingIn.current = false;
@@ -152,7 +193,6 @@ export default function LoginPage() {
                     placeholder="เลขบัตรประชาชน (CID)"
                     value={cid}
                     onChange={(e) => {
-                      // เก็บเฉพาะตัวเลข + จำกัด 13 หลัก
                       const digits = e.target.value.replace(/\D/g, '').slice(0, 13);
                       setCid(digits);
                     }}
@@ -228,6 +268,15 @@ export default function LoginPage() {
           </div>
         </div>
       </div>
+
+      {/* Popup ตรงนี้ */}
+      {popupProps && (
+        <ReusablePopup
+          open={popupOpen}
+          onClose={() => setPopupOpen(false)}
+          {...popupProps}
+        />
+      )}
     </div>
   );
 }

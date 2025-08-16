@@ -15,11 +15,47 @@ type Props = {
 export default function Sidebar({ selected, setSelected, setShowRightPanel }: Props) {
   const pathname = usePathname()
   const [search, setSearch] = useState('')
-  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
-    screening: true,
-    opd: true,
-    symptoms: true,
-  })
+
+  const menuItems = [
+    {
+      key: 'screening',
+      title: 'คัดกรองอาการ',
+      links: [
+        { label: 'ระบบแนะนำห้องตรวจ', href: '/erdsppk' },
+        { label: 'แบบฟอร์มคัดกรองผู้ป่วย', href: '/formppk' },
+      ]
+    },
+    {
+      key: 'special-disease',
+      title: 'โรคพิเศษ',
+      links: [
+        { label: 'โรคพิเศษเฝ้าระวัง', href: '/special-disease-surveillance' },
+      ]
+    },
+    {
+      key: 'dashboard',
+      title: 'สถิติการใช้ระบบ',
+      links: [
+        { label: 'ผลรวมการแนะนำห้องตรวจ', href: '/dashboard' },
+      ]
+    },
+    {
+      key: 'settpatient-history',
+      title: 'บันทึกผู้ป่วย',
+      links: [
+        { label: 'ประวัติผู้ป่วย', href: '/patient-history' },
+      ]
+    },
+  ]
+
+  // เปิดทุก section ตั้งแต่แรก
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(
+    () =>
+      menuItems.reduce((acc, item) => {
+        acc[item.key] = true
+        return acc
+      }, {} as Record<string, boolean>)
+  )
 
   const toggleSection = (key: string) => {
     setOpenSections(prev => ({ ...prev, [key]: !prev[key] }))
@@ -35,43 +71,6 @@ export default function Sidebar({ selected, setSelected, setShowRightPanel }: Pr
       if (newSelected.length === 0) setShowRightPanel(false)
     }
   }
-
-  const menuItems = [
-    {
-      key: 'screening',
-      title: 'คัดกรองอาการ',
-      links: [
-        { label: 'ระบบแนะนำห้องตรวจ', href: '/erdsppk' },
-        { label: 'แบบฟอร์มคัดกรองผู้ป่วย', href: '/formppk' },
-        { label: 'สรุปแบบฟอร์มก่อนพิมพ์', href: '/printsummary' },
-        { label: 'ผลรวมการแนะนำห้องตรวจ', href: '/dashboard' },
-        { label: 'โรคพิเศษเฝ้าระวัง', href: '/special-disease-surveillance' }
-      ]
-    },
-    {
-      key: 'opd',
-      title: 'ห้องตรวจ',
-      links: [
-        { label: 'OPD ศัลย์', href: '/opd-id/surgery' },
-        { label: 'OPD Ortho', href: '/opd-id/ortho' },
-        { label: 'รพ.เมือง', href: '/opd-id/muanghospital' },
-        { label: 'ER', href: '/opd-id/er' },
-        { label: 'OPD ENT', href: '/opd-id/ent' },
-        { label: 'OPD URO ศัลย์', href: '/opd-id/uro' },
-        { label: 'OPD นรีเวช', href: '/opd-id/obgyn' },
-        { label: 'OPD Med', href: '/opd-id/med' },
-        { label: 'นิติเวช', href: '/opd-id/forensic' },
-        { label: 'ER Consult นิติเวช', href: '/opd-id/er-forensic' },
-        { label: 'LR', href: '/opd-id/lr' },
-        { label: 'OPD ANC', href: '/opd-id/anc' },
-        { label: 'OPD จิตเวช', href: '/opd-id/psych' },
-        { label: 'OPD 203', href: '/opd-id/room203' },
-        { label: 'OPD ทันตกรรม', href: '/opd-id/dent' },
-        { label: 'OPD ศัลย์ตกแต่ง', href: '/opd-id/plasticsurg' },
-        { label: 'อาชีวเวชกรรม', href: '/opd-id/occupational' },
-      ]
-    },
-  ]
 
   return (
     <aside className={styles.sidebar}>

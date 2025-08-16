@@ -3,67 +3,131 @@
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Illuminate\Database\Eloquent\Factories\HasFactory; 
-use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Builder;
-use Carbon\Carbon;
+use Illuminate\Support\Carbon;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable
 {
     use HasApiTokens, Notifiable, HasFactory;
 
+    // แนะนำให้มีคงที่ไว้ใช้ในโค้ดส่วนอื่น ๆ
+    public const STATUS_PENDING  = 'pending';
+    public const STATUS_APPROVED = 'approved';
+    public const STATUS_REJECTED = 'rejected';
+
+    public const ROLE_USER  = 'user';
+    public const ROLE_ADMIN = 'admin';
+
+    /**
+     * ฟิลด์ที่อนุญาตให้กรอกผ่าน mass assignment
+     */
     protected $fillable = [
-        'cid',             // เลขบัตรประชาชน (13 หลัก)
+        'cid',
         'first_name',
         'last_name',
         'email',
         'password',
-        'status',          // pending / approved / rejected
-        'role',            // user / admin
-        // ถ้าคุณมีคอลัมน์เหล่านี้ใน DB แล้ว ให้เปิดใช้ได้เลย
+
+        'status',            // pending | approved | rejected
+        'role',              // user | admin
+
         'approved_at',
         'rejected_reason',
         'email_verified_at',
+
+        // อนุญาตสมัครใหม่
+        'reapply_allowed',
+        'reapply_until',
     ];
 
+    /**
+     * ฟิลด์ที่ซ่อนไม่ให้ serialize กลับไปยัง response
+     */
     protected $hidden = [
         'password',
         'remember_token',
     ];
 
+    /**
+     * แปลงชนิดข้อมูลอัตโนมัติ
+     */
     protected $casts = [
         'email_verified_at' => 'datetime',
-        // ถ้ามีในตาราง:
         'approved_at'       => 'datetime',
+        'reapply_allowed'   => 'boolean',
+        'reapply_until'     => 'date',
     ];
 
-    // ---------- Accessors / Appends ----------
-    protected $appends = ['full_name'];
+    /**
+     * Appends: เพิ่ม accessor ลงไปให้ serialize อัตโนมัติ
+     */
+    protected $appends = ['full_name', 'name', 'is_approved', 'can_reapply'];
+
+    // ===== Accessors =====
 
     public function getFullNameAttribute(): string
     {
-        return trim("{$this->first_name} {$this->last_name}");
+        return trim(sprintf('%s %s', $this->first_name ?? '', $this->last_name ?? ''));
+    }
+
+    public function getNameAttribute(): string
+    {
+        $username     = $this->attributes['username']     ?? null; // ไม่มีคอลัมน์ก็ fine -> null
+        $display_name = $this->attributes['display_name'] ?? null;
+
+        return $display_name
+            ?: ($username ?: ($this->full_name ?: ($this->email ?? (string) $this->cid)));
     }
 
     public function getIsApprovedAttribute(): bool
     {
-        return $this->status === 'approved';
+        return $this->status === self::STATUS_APPROVED;
     }
 
-    // ---------- Scopes ----------
+    public function getCanReapplyAttribute(): bool
+    {
+        if (!$this->reapply_allowed) return false;
+        // ถ้าไม่มี until = อนุญาตเลย, ถ้ามีจนถึงวันที่กำหนด (รวมวันนั้น)
+        return !$this->reapply_until
+            || now()->startOfDay()->lte(Carbon::parse($this->reapply_until)->endOfDay());
+    }
+
+    // ===== Scopes =====
+
     public function scopePending(Builder $q): Builder
     {
-        return $q->where('status', 'pending');
+        return $q->where('status', self::STATUS_PENDING);
     }
 
     public function scopeApproved(Builder $q): Builder
     {
-        return $q->where('status', 'approved');
+        return $q->where('status', self::STATUS_APPROVED);
     }
 
-    // ---------- Mutators (Data Hygiene) ----------
+    public function scopeRejected(Builder $q): Builder
+    {
+        return $q->where('status', self::STATUS_REJECTED);
+    }
+
+    public function scopeSearch(Builder $q, ?string $term): Builder
+    {
+        $term = trim((string)$term);
+        if ($term === '') return $q;
+
+        return $q->where(function (Builder $qq) use ($term) {
+            $qq->where('first_name', 'like', "%{$term}%")
+               ->orWhere('last_name',  'like', "%{$term}%")
+               ->orWhere('email',      'like', "%{$term}%")
+               ->orWhere('cid',        'like', "%{$term}%");
+        });
+    }
+
+    // ===== Mutators (Data Hygiene) =====
+
     public function setEmailAttribute(?string $value): void
     {
         $this->attributes['email'] = $value ? mb_strtolower(trim($value)) : null;
@@ -71,53 +135,47 @@ class User extends Authenticatable
 
     public function setPasswordAttribute(string $value): void
     {
-        // ป้องกันการ hash ซ้ำเมื่ออัปเดตผ่าน seeder/fixture ที่ส่งเป็น hash มาแล้ว
+        // ป้องกัน hash ซ้ำ หากค่าที่ส่งมาเป็น hash อยู่แล้ว
         $this->attributes['password'] = Hash::needsRehash($value) ? Hash::make($value) : $value;
     }
 
-    public function setCidAttribute(string $value): void
+    public function setCidAttribute(?string $value): void
     {
         // เก็บเฉพาะตัวเลข 13 หลัก
-        $digits = preg_replace('/\D/', '', $value ?? '');
+        $digits = preg_replace('/\D/', '', (string) $value);
         $this->attributes['cid'] = $digits;
     }
 
-    // ---------- Token Helpers ----------
-    /**
-     * ออกโทเคน Sanctum แบบ "ต่ออายุรายวัน" (สิ้นสุดวันตามเวลาไทย)
-     * แนวคิด: ลบโทเคนชื่อเดียวกันก่อน แล้วออกใหม่ -> ได้ plainTextToken ใหม่ทุกครั้ง
-     * ถ้าตาราง tokens ของคุณไม่มีคอลัมน์ expires_at -> Sanctum จะใช้ค่า expiration จาก config แทน
-     *
-     * @param  string $name      ชื่อโทเคน (เช่น 'auth_token' หรือแนกตาม device)
-     * @param  array  $abilities ความสามารถ (scopes) เริ่มต้น ['*']
-     * @return string            plainTextToken (ส่งให้ฝั่ง FE)
-     */
-    public function createOrReuseDailyToken(string $name = 'auth_token', array $abilities = ['*']): string
+    public function setFirstNameAttribute(?string $value): void
     {
-        $tz = config('app.timezone', 'Asia/Bangkok');
-        $endOfDay = Carbon::now($tz)->endOfDay();
+        $this->attributes['first_name'] = $value ? trim($value) : null;
+    }
 
-        // ลบโทเคนชื่อเดียวกันออกก่อน เพื่อไม่กองหลายตัว
+    public function setLastNameAttribute(?string $value): void
+    {
+        $this->attributes['last_name'] = $value ? trim($value) : null;
+    }
+
+    // ===== Token Helpers (Sanctum) =====
+
+    /**
+     * ออกโทเคนใหม่ (ลบของเก่าชื่อเดียวกันก่อน) พร้อมกำหนดวันหมดอายุ (ดีฟอลต์ 24 ชม.)
+     */
+    public function issueToken(string $name = 'auth_token', array $abilities = ['*'], ?Carbon $expiresAt = null): string
+    {
         $this->tokens()->where('name', $name)->delete();
-
-        // ใช้ Sanctum API มาตรฐาน (จะ hash ให้เอง)
-        // Laravel 11 / Sanctum 4 รองรับส่ง expiresAt เป็น Carbon ได้
-        $token = $this->createToken($name, $abilities, $endOfDay);
-
+        $expiresAt = $expiresAt ?? now()->addDay();
+        $token = $this->createToken($name, $abilities, $expiresAt);
         return $token->plainTextToken;
     }
 
-    /**
-     * เพิกถอนโทเคนชื่อที่กำหนด (เช่นตอน logout)
-     */
+    /** เพิกถอนโทเคนตามชื่อ */
     public function revokeTokenByName(string $name = 'auth_token'): void
     {
         $this->tokens()->where('name', $name)->delete();
     }
 
-    /**
-     * เพิกถอนทุกโทเคนของผู้ใช้ (กรณี force logout ทั้งอุปกรณ์)
-     */
+    /** เพิกถอนโทเคนทั้งหมดของผู้ใช้ */
     public function revokeAllTokens(): void
     {
         $this->tokens()->delete();

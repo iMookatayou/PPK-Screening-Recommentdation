@@ -1,48 +1,72 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState, useMemo } from 'react'
 
 interface CellulitisResult {
   question: string
   question_code: number
   question_title: string
   clinic: string[]
-  note?: string
+  note: string              
   symptoms: string[]
   isReferCase: boolean
-  type: string 
+  type: string
 }
 
 interface CellulitisProps {
   onResult: (result: CellulitisResult) => void
-  type: string 
+  type: string
 }
 
 export default function Question3_Cellulitis({ onResult, type }: CellulitisProps) {
-  const [isLargeWound, setIsLargeWound] = useState<boolean>(false)
-  const [note, setNote] = useState<string>('')
+  const [isLargeWound, setIsLargeWound] = useState(false)
+  const [note, setNote] = useState('')
 
-  useEffect(() => {
+  // ทำ onResult ให้เสถียร
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+
+  const computed = useMemo(() => {
     const clinic = isLargeWound ? 'surg' : 'muang'
-    const symptoms = ['cellulitis']
-    if (isLargeWound) symptoms.push('large_wound')
+    const symptoms: string[] = ['cellulitis']
+    const noteParts: string[] = []
 
-    let combinedNote = note.trim()
     if (isLargeWound) {
-      combinedNote = `แผลขนาดใหญ่${combinedNote ? ' - ' + combinedNote : ''}`
+      symptoms.push('large_wound')
+      noteParts.push('แผลขนาดใหญ่')
     }
 
-    onResult({
+    const extra = note.trim()
+    if (extra) {
+      noteParts.push(extra)
+      if (!symptoms.includes('cellulitis_note')) symptoms.push('cellulitis_note')
+    }
+
+    const mergedNote = noteParts.join(' | ')
+
+    const payload: CellulitisResult = {
       question: 'Cellulitis',
       question_code: 3,
       question_title: 'Cellulitis / แมลงสัตว์กัดต่อย',
       clinic: [clinic],
-      note: combinedNote || undefined,
+      note: mergedNote,
       symptoms,
-      isReferCase: false,
-      type, 
-    })
+      isReferCase: false, 
+      type,
+    }
+
+    const key = JSON.stringify({ clinic, symptoms, mergedNote, isLargeWound, type })
+    return { key, payload }
   }, [isLargeWound, note, type])
+
+  // กันยิงซ้ำค่าเดิม
+  const prevKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (prevKeyRef.current !== computed.key) {
+      prevKeyRef.current = computed.key
+      onResultRef.current(computed.payload)
+    }
+  }, [computed])
 
   return (
     <div className="space-y-3 text-sm text-gray-800">
@@ -67,7 +91,7 @@ export default function Question3_Cellulitis({ onResult, type }: CellulitisProps
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={2}
-          placeholder="เช่น มีหนอง หรือรอยแดงกว้าง"
+          placeholder="ใส่รายละเอียดเพิ่มเติม"
           className="w-full border border-gray-300 rounded px-3 py-2"
         />
       </div>

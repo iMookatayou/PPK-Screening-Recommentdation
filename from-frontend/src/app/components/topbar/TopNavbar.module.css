@@ -161,18 +161,75 @@
   background-color: #e5e7eb;
 }
 
-/* ---------- iPad (768px–1024px) ---------- */
-@media (max-width: 1024px) {
+/* ===== Admin badge ===== */
+.adminBtn {
+  position: relative; /* ให้ badge วางบนมุมปุ่มได้ */
+}
+
+.adminBadge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  background: #ef4444; /* แดงราชการ ๆ */
+  color: #fff;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #fff; /* แยกพื้นหลังให้อ่านง่าย */
+  box-shadow: 0 1px 4px rgba(0,0,0,0.16);
+  line-height: 1;
+}
+
+/* ---------- iPad แนวตั้ง/แนวนอน (768px–1024px) ---------- */
+@media (min-width: 768px) and (max-width: 1024px) {
   .titleGroup {
-    display: none;
+    display: none; /* ซ่อนชื่อยาว */
   }
 
   .name {
-    max-width: 100px;
+    max-width: 90px; /* ลดความยาวชื่อ */
   }
 
   .userBox {
     padding: 0.25rem 0.5rem;
+    max-height: 36px;
+  }
+
+  .avatar {
+    width: 30px;
+    height: 30px;
+  }
+
+  .logoutBtn {
+    padding: 0.35rem;
+  }
+
+  .logoutIcon {
+    width: 16px;
+    height: 16px;
+  }
+
+  .adminBtn {
+    padding: 0.35rem;
+  }
+
+  .adminIcon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .adminBadge {
+    top: -5px;
+    right: -5px;
+    min-width: 18px;
+    height: 18px;
+    font-size: 11px;
   }
 }
 

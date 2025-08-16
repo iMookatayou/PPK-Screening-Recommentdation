@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { isAllowableKeloidDay, getThaiDayName } from '@/lib/dateUtils'
-import ReusablePopup from '@/app/components/ui/ReusablePopup'
-import { AlertTriangle, CheckCircle } from 'lucide-react'
+import ReusablePopup from '@/app/components/ui/popup/ReusablePopup'
+import { AlertTriangle } from 'lucide-react'
 
 export interface Question16Result {
   question: string
@@ -30,33 +30,25 @@ export default function Question16_Keloid({ onResult, type }: Props) {
   const allow = isAllowableKeloidDay()
   const thaiDay = getThaiDayName()
 
-  // Memoized logic for preparing the result
+  // เตรียมผลลัพธ์เฉพาะวันให้บริการ
   const calculateResult = useCallback((): Question16Result => {
     const symptoms = ['keloid']
-    if (!allow) symptoms.push('not_service_day')
-
-    let noteBase = allow
-      ? 'ตรวจติดตาม Keloid ตามวันให้บริการ'
-      : `ไม่สามารถตรวจได้ในวัน${thaiDay} (นอกวันให้บริการ)`
-
-    if (extraNote.trim()) {
-      noteBase += ` | หมายเหตุ: ${extraNote.trim()}`
-    }
-
+    let noteBase = 'ตรวจติดตาม Keloid ตามวันให้บริการ'
+    if (extraNote.trim()) noteBase += ` | หมายเหตุ: ${extraNote.trim()}`
     return {
       question: 'KeloidCheck',
       question_code: 16,
       question_title: 'ตรวจติดตาม Keloid (แผลเป็นนูน)',
-      clinic: allow ? ['plastic'] : [],
+      clinic: ['plastic'],
       note: noteBase,
       symptoms,
       isReferCase: false,
       routedBy: 'auto',
       type,
     }
-  }, [allow, thaiDay, extraNote, type])
+  }, [extraNote, type])
 
-  // Popup only shown once
+  // แสดง Popup ครั้งเดียวเมื่อ "ไม่ใช่วันให้บริการ"
   useEffect(() => {
     if (!allow && !shownPopup) {
       setPopupOpen(true)
@@ -64,39 +56,53 @@ export default function Question16_Keloid({ onResult, type }: Props) {
     }
   }, [allow, shownPopup])
 
-  // Debounced onResult()
+  // อัปเดตผลลัพธ์ให้ parent
   useEffect(() => {
     const timer = setTimeout(() => {
-      const result = calculateResult()
-      const isEmpty =
-        result.clinic.length === 0 &&
-        result.symptoms.length === 0 &&
-        !result.note?.trim()
-
-      onResult(isEmpty ? null : result)
+      if (!allow) onResult(null)
+      else onResult(calculateResult())
     }, 100)
-
     return () => clearTimeout(timer)
-  }, [calculateResult, onResult])
+  }, [allow, calculateResult, onResult])
 
+  // --- UI ---
+  if (!allow) {
+    return (
+      <>
+        {/* ข้อความเตือนซ้ำในฟอร์ม */}
+        <div className="space-y-3 text-sm">
+          <div className="flex items-center gap-2 text-red-600">
+            <AlertTriangle className="w-5 h-5" aria-hidden />
+            <span>
+              วันนี้ไม่เปิดให้บริการตรวจ Keloid
+              — เปิดเฉพาะวันจันทร์และพฤหัสบดี (วันนี้คือวัน{thaiDay})
+            </span>
+          </div>
+          <div className="ml-7 text-gray-700">
+            กรุณาแนะนำให้ผู้ป่วยมาตรวจในวันให้บริการ
+          </div>
+        </div>
+
+        {/* Popup แจ้งเตือน */}
+        <ReusablePopup
+          isOpen={popupOpen}
+          onClose={() => setPopupOpen(false)}
+          title="วันนี้ไม่มีบริการตรวจ Keloid"
+          message={`เปิดเฉพาะวันจันทร์และพฤหัสบดี (วันนี้คือวัน${thaiDay}) กรุณาแนะนำให้มาตรวจในวันให้บริการ`}
+          icon={<AlertTriangle className="text-red-500 w-6 h-6 animate-pulse" />}
+          confirmText="เข้าใจแล้ว"
+          color="yellow"
+        />
+      </>
+    )
+  }
+
+  // วันให้บริการ: แสดงข้อความยืนยัน + ช่องหมายเหตุ
   return (
     <div>
-      {allow ? (
-        <div className="text-green-700 font-medium flex items-center gap-2">
-          <CheckCircle className="w-5 h-5 text-green-600" />
-          วันนี้สามารถเข้ารับการตรวจ Keloid ได้
-        </div>
-      ) : (
-        <div className="text-red-600 font-medium">
-          <div className="flex items-center gap-2 mb-1">
-            <AlertTriangle className="w-5 h-5 text-red-600" />
-            วันนี้ไม่สามารถตรวจ Keloid ได้
-          </div>
-          <p className="text-sm text-gray-700 ml-6">
-            เปิดเฉพาะวันจันทร์และพฤหัสบดีเท่านั้น (วันนี้คือวัน{thaiDay})
-          </p>
-        </div>
-      )}
+      <div className="text-green-700 font-medium flex items-center gap-2">
+        วันนี้สามารถเข้ารับการตรวจ Keloid ได้
+      </div>
 
       <div className="mt-4">
         <label htmlFor="extraNote" className="block font-medium mb-1">
@@ -112,16 +118,6 @@ export default function Question16_Keloid({ onResult, type }: Props) {
           onChange={(e) => setExtraNote(e.target.value)}
         />
       </div>
-
-      <ReusablePopup
-        isOpen={popupOpen}
-        onClose={() => setPopupOpen(false)}
-        title="วันนี้ไม่มีบริการตรวจ Keloid"
-        message="เปิดเฉพาะวันจันทร์และพฤหัสบดี กรุณาแนะนำมาตรวจในวันให้บริการ"
-        icon={<AlertTriangle className="text-red-500 w-6 h-6 animate-pulse" />}
-        confirmText="เข้าใจแล้ว"
-        color="yellow"
-      />
     </div>
   )
 }

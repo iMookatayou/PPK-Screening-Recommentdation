@@ -9,7 +9,6 @@ interface Question11Result {
   clinic: string[]
   note: string
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
   type: string
 }
@@ -22,55 +21,62 @@ interface Question11Props {
 export default function Question11_OSCC({ onResult, type }: Question11Props) {
   const [injuryStatus, setInjuryStatus] = useState<'hasInjury' | 'noInjury' | ''>('')
   const [extraNote, setExtraNote] = useState('')
-  const prevKeyRef = useRef('')
+
+  // กันลูปจาก onResult reference เปลี่ยน
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+
+  const prevKeyRef = useRef('__INIT__')
 
   useEffect(() => {
+    // ยังไม่เลือกอาการ -> ส่ง null ครั้งเดียว
     if (!injuryStatus) {
-      if (prevKeyRef.current !== 'null') {
-        prevKeyRef.current = 'null'
-        onResult(null)
+      if (prevKeyRef.current !== 'EMPTY') {
+        prevKeyRef.current = 'EMPTY'
+        onResultRef.current(null)
       }
       return
     }
 
+    // route ห้องตรวจตามอาการ
     let clinic = ''
-    const symptoms = ['oscc_case']
+    const symptoms: string[] = ['oscc_case']
     const noteParts: string[] = []
-    let isReferCase = false
 
     if (injuryStatus === 'hasInjury') {
       clinic = 'er'
       symptoms.push('injury')
       noteParts.push('มีการบาดเจ็บต่อร่างกาย หรือมีบาดแผล')
-      isReferCase = true
-    } else if (injuryStatus === 'noInjury') {
+    } else {
       clinic = 'nite'
       symptoms.push('no_injury')
       noteParts.push('ไม่มีการบาดเจ็บต่อร่างกาย')
     }
 
-    if (extraNote.trim()) {
-      noteParts.push(extraNote.trim())
+    const extra = extraNote.trim()
+    if (extra) {
+      noteParts.push(extra)
+      symptoms.push('oscc_note')
     }
 
     const note = noteParts.join(' | ')
-    const key = `${injuryStatus}-${extraNote.trim()}`
+    const payload: Question11Result = {
+      question: 'OSCC',
+      question_code: 11,
+      question_title: 'ผู้ป่วย OSCC (ความรุนแรงทางร่างกาย/จิตใจ)',
+      clinic: [clinic],
+      note,
+      symptoms,
+      routedBy: 'auto',
+      type,
+    }
 
+    const key = JSON.stringify(payload)
     if (prevKeyRef.current !== key) {
       prevKeyRef.current = key
-      onResult({
-        question: 'OSCC',
-        question_code: 11,
-        question_title: 'ผู้ป่วย OSCC (ความรุนแรงทางร่างกาย/จิตใจ)',
-        clinic: [clinic],
-        note,
-        symptoms,
-        isReferCase,
-        routedBy: 'auto',
-        type,
-      })
+      onResultRef.current(payload)
     }
-  }, [injuryStatus, extraNote, type, onResult])
+  }, [injuryStatus, extraNote, type])
 
   return (
     <div className="space-y-4 text-sm text-gray-800">

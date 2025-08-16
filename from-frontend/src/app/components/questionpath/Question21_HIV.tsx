@@ -21,34 +21,26 @@ interface Question21_HIVProps {
 
 export default function Question21_HIV({ onResult, type }: Question21_HIVProps) {
   const [note, setNote] = useState('')
-  const prevKey = useRef('')
+  const prevKey = useRef<string>('')
 
   useEffect(() => {
-    const baseSymptoms = ['hiv_exposure']
-    const symptoms = [...baseSymptoms]
     const trimmed = note.trim()
-    const noteText = trimmed ? `รายละเอียดเพิ่มเติม: ${trimmed}` : 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV'
+    const symptoms = ['hiv_exposure', ...(trimmed ? ['hiv_note'] : [])]
+    const noteText = trimmed || 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV'
+    const clinic = ['er']
+    const isReferCase = true
 
-    if (trimmed) symptoms.push('custom_note')
-
-    const currentKey = JSON.stringify({ note: noteText, symptoms })
-
+    const currentKey = JSON.stringify({ noteText, symptoms, clinic, isReferCase, type })
     if (prevKey.current !== currentKey) {
       prevKey.current = currentKey
-
-      if (!trimmed) {
-        onResult(null)
-        return
-      }
-
       onResult({
         question: 'HIVExposure',
         question_code: 21,
         question_title: 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV',
-        clinic: ['er'],
+        clinic,
         note: noteText,
         symptoms,
-        isReferCase: true,
+        isReferCase,
         routedBy: 'auto',
         type,
       })

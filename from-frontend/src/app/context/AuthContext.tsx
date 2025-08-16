@@ -148,7 +148,7 @@ import React, {
   useRef,
 } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { authAxios } from '@/lib/axios'
+import { authAxios, setAuthHeader } from '@/lib/axios'
 import AnimatedLogo from '@/app/animatorlogo/AnimatedLogo'
 import LoadingDots from '@/app/components/ui/LoadingDots'
 
@@ -211,6 +211,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     setUser(null)
     setToken(null)
+    setAuthHeader(undefined)          
     setLoading(false)
     clearLogoutTimer()
 
@@ -245,6 +246,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       setToken(rawToken)
       setUser(userObj)
+      setAuthHeader(rawToken)         
       scheduleAutoLogout(expiresAt)
 
       try {
@@ -262,11 +264,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setLoading(true)
     const tokenFromStorage = localStorage.getItem(STORAGE_TOKEN_KEY)
     if (!tokenFromStorage) {
+      setAuthHeader(undefined)  
       setLoading(false)
       return
     }
 
     try {
+      setAuthHeader(tokenFromStorage)
       const res = await authAxios.get('/me')
       setUser(res.data)
       setToken(tokenFromStorage)
@@ -286,10 +290,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const exp = localStorage.getItem(STORAGE_EXP_KEY)
 
     if (!tokenFromStorage) {
+      setAuthHeader(undefined)       
       setLoading(false)
       return
     }
 
+    setAuthHeader(tokenFromStorage) 
     refreshUser()
     scheduleAutoLogout(exp)
   }, [refreshUser, scheduleAutoLogout])
@@ -313,6 +319,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (payload.type === 'LOGOUT') {
           setUser(null)
           setToken(null)
+          setAuthHeader(undefined)   
           clearLogoutTimer()
           if (!publicPaths.has(window.location.pathname)) {
             router.replace('/login')

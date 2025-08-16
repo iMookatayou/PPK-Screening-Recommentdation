@@ -1,7 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
-import { getThaiDayNumber } from '@/lib/dateUtils'
+import React, { useEffect, useRef, useState } from 'react'
 
 interface ThyroidResult {
   question: string
@@ -10,8 +9,9 @@ interface ThyroidResult {
   clinic: string[]
   note?: string
   symptoms: string[]
-  isReferCase: boolean
   type: string
+  // isReferCase: ไม่ส่งถ้าไม่ใช่ refer → ทำให้เป็น optional และใส่เฉพาะตอนเป็น true เท่านั้น
+  isReferCase?: boolean
 }
 
 interface ThyroidProps {
@@ -20,97 +20,112 @@ interface ThyroidProps {
 }
 
 export default function Question5_Thyroid({ onResult, type }: ThyroidProps) {
-  const [hasSelected, setHasSelected] = useState(false)
-  const [isNewCase, setIsNewCase] = useState<boolean | null>(null)
+  const [isNewCase, setIsNewCase] = useState(false)
+  const [hasPalpTremor, setHasPalpTremor] = useState(false)
   const [note, setNote] = useState('')
+  const [touched, setTouched] = useState(false)
+
+  // ใช้ ref กันลูปจาก onResult reference เปลี่ยน
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+
+  // กันยิงซ้ำค่าเดิม
+  const prevKeyRef = useRef<string>('__INIT__')
 
   useEffect(() => {
-    // ถ้ายังไม่ได้เลือก new/followup ให้ส่ง null ออกไป
-    if (!hasSelected || isNewCase === null) {
-      onResult(null)
+    if (!touched) {
+      // ยังไม่แตะอะไร → ส่ง null ครั้งเดียว
+      if (prevKeyRef.current !== 'EMPTY') {
+        prevKeyRef.current = 'EMPTY'
+        onResultRef.current(null)
+      }
       return
     }
 
-    const today = getThaiDayNumber()
-    const weekday = today >= 1 && today <= 5 ? today : 1 // เปลี่ยนวันหยุดเป็นวันจันทร์
+    const symptoms: string[] = ['thyroid']
+    const noteParts: string[] = []
+    let clinic: string[] = []
 
-    // สร้างค่าผลลัพธ์
-    const baseSymptoms: string[] = ['thyroid']
-    const noteItems: string[] = []
-
-    let clinic = ''
     if (isNewCase) {
-      clinic = 'muang'
-      baseSymptoms.push('thyroid_new')
-      noteItems.push('New Case')
+      clinic = ['muang'] // New case → รพ.เมือง
+      symptoms.push('thyroid_new')
+      noteParts.push('New case')
     } else {
-      clinic = weekday % 2 === 0 ? 'ent' : 'surg'
-      baseSymptoms.push('thyroid_followup')
-      noteItems.push('Follow-up')
+      // Follow-up: วันคู่ ENT, วันคี่ ศัลย์ (อิง day-of-month)
+      const dayOfMonth = new Date().getDate()
+      const isEven = dayOfMonth % 2 === 0
+      clinic = [isEven ? 'ent' : 'surg']
+      symptoms.push('thyroid_followup')
+      noteParts.push('Follow-up', isEven ? 'วันคู่ → ENT' : 'วันคี่ → ศัลย์')
     }
 
-    if (note.trim()) {
-      noteItems.push(note.trim())
+    if (hasPalpTremor) {
+      symptoms.push('palpitation_tremor')
+      noteParts.push('มีอาการใจสั่น/มือสั่น')
     }
 
-    const result: ThyroidResult = {
+    const extra = note.trim()
+    if (extra) {
+      noteParts.push(extra)
+      symptoms.push('thyroid_note')
+    }
+
+    const finalNote = noteParts.join(' | ') || undefined
+
+    // เตรียม payload โดย “ไม่ใส่ isReferCase เลย” (เพราะไม่ใช่ refer)
+    const payload: ThyroidResult = {
       question: 'ThyroidCase',
       question_code: 5,
       question_title: 'ไทรอยด์ (Thyroid)',
-      clinic: [clinic],
-      note: noteItems.length > 0 ? noteItems.join(' | ') : undefined,
-      symptoms: baseSymptoms,
-      isReferCase: true,
+      clinic,
+      note: finalNote,
+      symptoms,
       type,
     }
 
-    onResult(result)
-  }, [hasSelected, isNewCase, note, type])
+    const key = JSON.stringify(payload)
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResultRef.current(payload)
+    }
+  }, [isNewCase, hasPalpTremor, note, type, touched])
 
   return (
-    <div className="space-y-3 text-sm text-gray-800">
-      <p>ผู้ป่วยเป็นไทรอยด์ เป็น New Case หรือไม่?</p>
+    <div className="space-y-4 text-sm text-gray-800">
+      <p className="font-medium">Thyroid</p>
 
-      <div className="flex items-center gap-4">
+      <div className="flex flex-col gap-3">
         <label className="inline-flex items-center gap-2">
           <input
-            type="radio"
-            name="thyroid-case"
-            value="new"
-            checked={isNewCase === true}
-            onChange={() => {
-              setIsNewCase(true)
-              setHasSelected(true)
-            }}
+            type="checkbox"
+            checked={isNewCase}
+            onChange={(e) => { setIsNewCase(e.target.checked); setTouched(true) }}
+            className="w-4 h-4"
           />
-          <span>New Case</span>
+          <span>เป็น New case</span>
         </label>
 
         <label className="inline-flex items-center gap-2">
           <input
-            type="radio"
-            name="thyroid-case"
-            value="followup"
-            checked={isNewCase === false}
-            onChange={() => {
-              setIsNewCase(false)
-              setHasSelected(true)
-            }}
+            type="checkbox"
+            checked={hasPalpTremor}
+            onChange={(e) => { setHasPalpTremor(e.target.checked); setTouched(true) }}
+            className="w-4 h-4"
           />
-          <span>Follow-up</span>
+          <span>มีอาการใจสั่น / มือสั่น</span>
         </label>
       </div>
 
       <div>
-        <label htmlFor="note" className="block font-medium mt-2 mb-1">
-          หมายเหตุเพิ่มเติม
+        <label htmlFor="note" className="block font-medium mt-1 mb-1">
+          หมายเหตุเพิ่มเติม (ถ้ามี)
         </label>
         <textarea
           id="note"
           value={note}
-          onChange={(e) => setNote(e.target.value)}
+          onChange={(e) => { setNote(e.target.value); setTouched(true) }}
           rows={2}
-          placeholder="ใส่รายละเอียด เช่น เคยผ่าตัดแล้ว"
+          placeholder="ใส่รายละเอียดเพิ่มเติม"
           className="w-full border border-gray-300 rounded px-3 py-2"
         />
       </div>

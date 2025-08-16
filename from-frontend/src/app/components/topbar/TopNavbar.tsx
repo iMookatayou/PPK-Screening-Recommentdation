@@ -3,24 +3,75 @@
 import { useAuth } from '@/app/context/AuthContext'
 import styles from './TopNavbar.module.css'
 import { LogOut, Menu, ShieldCheck } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { authAxios } from '@/lib/axios'
 
 export default function TopNavBar() {
   const { user, logout, loading } = useAuth()
   const [showMenu, setShowMenu] = useState(false)
   const router = useRouter()
 
+  // ------ NEW: pending badge ------
+  const [pending, setPending] = useState<number>(0)
+  const timerRef = useRef<NodeJS.Timeout | null>(null)
+
+  const fetchPending = async () => {
+    try {
+      // ขอเบา ๆ เอาแค่ meta.total
+      const res = await authAxios.get('/admin/users', {
+        params: { status: 'pending', per_page: 1, page: 1 },
+      })
+      const total = res?.data?.meta?.total ?? 0
+      setPending(total)
+    } catch {
+      // เงียบไว้ไม่รบกวนผู้ใช้
+    }
+  }
+
+  useEffect(() => {
+    if (!user || user.role !== 'admin') return
+
+    // ดึงครั้งแรก
+    fetchPending()
+
+    // กลับมาโฟกัสหน้า → รีเฟรชเลข
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') fetchPending()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+
+    // ตั้ง interval ทุก 60 วิ (ปรับได้)
+    timerRef.current = setInterval(fetchPending, 60_000)
+
+    // ฟัง event ภายในแอป เวลาเพิ่งอนุมัติ/ปฏิเสธ → ให้รีเฟรชเลขทันที
+    const refreshHandler = () => fetchPending()
+    window.addEventListener('admin-pending-refresh', refreshHandler as EventListener)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('admin-pending-refresh', refreshHandler as EventListener)
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  }, [user])
+  // ------ /NEW ------
+
   const displayName = useMemo(() => {
     if (!user) return ''
-    // รองรับทั้งกรณี backend ส่ง name มา และกรณีมี first_name/last_name เท่านั้น
     const fromFL = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
     return (user.name && user.name.trim()) || fromFL || user.email || 'ไม่พบชื่อ'
   }, [user])
 
   const avatarSrc = user?.avatar || '/ico/useravatar.ico'
-
   const goToAdminPage = () => router.push('/admin/user')
+  // cap 99+
+  const pendingText = pending > 99 ? '99+' : String(pending)
+  const adminAria =
+    !loading && user?.role === 'admin'
+      ? pending > 0
+        ? `หน้าแอดมิน มีผู้รออนุมัติ ${pending} ราย`
+        : 'หน้าแอดมิน'
+      : undefined
 
   return (
     <header className={styles.header}>
@@ -28,7 +79,7 @@ export default function TopNavBar() {
         <img src="/images/logoppk.png" alt="Logo" className={styles.logo} />
         <div className={styles.titleGroup}>
           <div className={styles.titleEn}>PHRAPOKKLAO HOSPITAL</div>
-          <div className={styles.titleTh}>โรงพยาบาลพระปกเกล้าจันทบุรี</div>
+          <div className={styles.titleTh}>PPK Pre-Service Health Screening System </div>
         </div>
       </div>
 
@@ -62,10 +113,16 @@ export default function TopNavBar() {
           </div>
         )}
 
-        {/* ปุ่มแอดมิน */}
+        {/* ปุ่มแอดมิน + badge */}
         {!loading && user?.role === 'admin' && (
-          <button onClick={goToAdminPage} className={styles.adminBtn} title="หน้าแอดมิน">
+          <button
+            onClick={goToAdminPage}
+            className={styles.adminBtn}
+            title="หน้าแอดมิน"
+            aria-label={adminAria}
+          >
             <ShieldCheck className={styles.adminIcon} />
+            {pending > 0 && <span className={styles.adminBadge}>{pendingText}</span>}
           </button>
         )}
 

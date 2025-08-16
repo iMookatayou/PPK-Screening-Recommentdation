@@ -211,25 +211,30 @@
 .formppk-referral-actions {
   display: flex;
   justify-content: center;
+  gap: 10px;              /* เพิ่มช่องไฟระหว่างปุ่ม */
   margin-top: 1rem;
 }
 
 .formppk-btn-confirm {
   background-color: #2563eb;
-  color: white;
+  color: #ffffff;
   font-weight: 600;
   font-size: 0.95rem;
   padding: 0.6rem 1.6rem;
   border-radius: 6px;
   border: none;
   cursor: pointer;
-  transition: background-color 0.2s ease, transform 0.2s ease;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 .formppk-btn-confirm:hover {
   background-color: #1d4ed8;
   transform: translateY(-1px);
 }
-
+.formppk-btn-confirm:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+  transform: none;
+}
 /* ------------------ Mobile ≤767px ------------------ */
 @media (max-width: 767px) {
   .formppk-wrapper {
@@ -289,6 +294,23 @@
   .formppk-referral-item {
     font-size: 0.9rem;
   }
+}
+
+.formppk-btn-print {
+  background-color: #f8fafc;        /* เทาอ่อน */
+  color: #111827;                    /* ตัวหนังสือเข้ม */
+  font-weight: 600;
+  font-size: 0.95rem;
+  padding: 0.6rem 1.2rem;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;         /* ขอบเทา */
+  cursor: pointer;
+  transition: background-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.formppk-btn-print:hover {
+  background-color: #eef2f7;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
 }
 
 /* ------------------ Tablet (768px–1024px) ------------------ */

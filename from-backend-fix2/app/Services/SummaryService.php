@@ -3,119 +3,158 @@
 namespace App\Services;
 
 use App\Models\QuestionResult;
-use App\Models\ReferralGuidance;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Carbon\Carbon;
 
 class SummaryService
 {
-    /**
-     * คืนค่า [$start, $end] แบบ inclusive ทั้งวัน และผูกกับ timezone ระบบ (Asia/Bangkok)
-     */
     protected function normalizeDateRange(?string $startDate, ?string $endDate): array
     {
         $tz = config('app.timezone', 'Asia/Bangkok');
 
-        $start = $startDate
-            ? Carbon::parse($startDate, $tz)->startOfDay()
-            : null;
-
-        $end = $endDate
-            ? Carbon::parse($endDate, $tz)->endOfDay()
-            : null;
+        $start = $startDate ? Carbon::parse($startDate, $tz)->startOfDay() : null;
+        $end   = $endDate   ? Carbon::parse($endDate, $tz)->endOfDay()   : null;
 
         return [$start, $end];
     }
 
-    /**
-     * Summary แยกตาม type:
-     * - formppk: นับอาการ (symptoms) จาก QuestionResult.type='formppk'
-     * - referral: นับราย question จาก ReferralGuidance
-     */
-    public function getSummary(?string $type = null, ?string $startDate = null, ?string $endDate = null): Collection
+    public function getSummary(string $type = 'total', ?string $startDate = null, ?string $endDate = null): Collection
     {
+        if ($type === 'formppk') $type = 'form';
+
         [$start, $end] = $this->normalizeDateRange($startDate, $endDate);
 
-        // ถ้ามีช่วงเวลา -> ไม่ cache เพื่อความถูกต้อง
         if ($start || $end) {
             return $this->buildSummary($type, $start, $end);
         }
 
-        // ไม่มีช่วงเวลา -> cache 10 นาที
-        $cacheKey = $type ? "summary_{$type}" : 'summary_all';
-        return Cache::remember($cacheKey, 600, function () use ($type) {
+        return Cache::remember("summary_{$type}", 600, function () use ($type) {
             return $this->buildSummary($type, null, null);
         });
     }
 
-    /**
-     * รวม formppk + referral
-     * โครงสร้าง: ['formppk' => Collection, 'referral' => Collection]
-     */
     public function getCombinedSummary(?string $startDate = null, ?string $endDate = null): array
     {
         [$start, $end] = $this->normalizeDateRange($startDate, $endDate);
 
-        // ถ้ามีช่วงเวลา -> ไม่ cache
         if ($start || $end) {
             return [
-                'formppk' => $this->buildSummary('formppk', $start, $end),
-                'referral' => $this->buildSummary('referral', $start, $end),
+                'form'  => $this->buildSummary('form',  $start, $end),
+                'guide' => $this->buildSummary('guide', $start, $end),
+                'total' => $this->buildSummary('total', $start, $end),
             ];
         }
 
-        // ไม่มีช่วงเวลา -> cache 10 นาที
         return Cache::remember('summary_combined', 600, function () {
             return [
-                'formppk' => $this->buildSummary('formppk', null, null),
-                'referral' => $this->buildSummary('referral', null, null),
+                'form'  => $this->buildSummary('form',  null, null),
+                'guide' => $this->buildSummary('guide', null, null),
+                'total' => $this->buildSummary('total', null, null),
             ];
         });
     }
 
     /**
-     * ฟังก์ชันแกนกลางสำหรับประกอบสรุป
+     * - กรอง symptom ที่เป็นโน้ต (_note/note) ทิ้ง
+     * - ถ้า symptoms เป็น slug อังกฤษล้วน และมี question_title → ใช้ question_title
+     * - ถ้า symptoms ว่าง → ใช้ question_title -> question_key -> question (ตัด *_note ออกด้วย)
+     * - รวมซ้ำแบบ case-insensitive
      */
-    protected function buildSummary(?string $type, $start, $end): Collection
+    protected function buildSummary(string $type, $start, $end): \Illuminate\Support\Collection
     {
-        if ($type === 'formppk') {
-            // นับ symptoms จาก QuestionResult.type=formppk
-            $query = QuestionResult::query()->where('type', 'formppk');
-            if ($start) $query->where('created_at', '>=', $start);
-            if ($end)   $query->where('created_at', '<=', $end);
+        if ($type === 'formppk') $type = 'form';
 
-            $rows = $query->get(['symptoms']);
+        $types = match ($type) {
+            'form'  => ['form', 'formppk'],
+            'guide' => ['guide'],
+            default => ['form', 'formppk', 'guide'],
+        };
 
-            return $rows
-                ->flatMap(fn ($r) => is_array($r->symptoms) ? $r->symptoms : [])
-                ->filter()
-                ->countBy()
-                ->map(fn ($total, $symptom) => [
-                    'symptom' => $symptom,
-                    'total'   => $total,
-                ])
-                ->values();
+        $query = QuestionResult::query()->whereIn('type', $types);
+        if ($start) $query->where('created_at', '>=', $start);
+        if ($end)   $query->where('created_at', '<=', $end);
+
+        // ต้องดึง field ที่ใช้ fallback มาด้วย
+        $rows = $query->get(['symptoms', 'question_title', 'question_key', 'question']);
+
+        $labels = $rows->flatMap(function ($r) {
+            // 0) fallback label ที่อ่านรู้เรื่องที่สุด (และไม่ใช่ *_note)
+            $fallback = $this->pickCleanLabel([
+                $r->question_title ?? null,
+                $r->question_key   ?? null,
+                $r->question       ?? null,
+            ]);
+
+            $list = [];
+
+            // 1) ใช้ symptoms ถ้ามี และ "กรองโน้ต" ออก
+            if (is_array($r->symptoms) && !empty($r->symptoms)) {
+                $list = array_values(array_filter(array_map(function ($s) {
+                    $t = trim((string)$s);
+                    if ($t === '') return null;
+
+                    // กรองโน้ต: ลงท้าย _note หรือคำว่า note
+                    if (preg_match('/(^|_)note$/i', $t) || strtolower($t) === 'note') return null;
+
+                    // normalize ช่องว่าง
+                    $t = preg_replace('/\s+/u', ' ', $t);
+
+                    return $t;
+                }, $r->symptoms)));
+            }
+
+            // 2) ถ้า symptom ทั้งหมดเป็น "slug" อังกฤษล้วน และมี fallback → ใช้ fallback เพียงตัวเดียว
+            if (!empty($list)) {
+                $allSlug = collect($list)->every(function ($t) {
+                    $t = str_replace('_', ' ', $t);
+                    return preg_match('/^[A-Za-z0-9 ]+$/', $t) === 1;
+                });
+
+                if ($allSlug && $fallback) {
+                    $list = [$fallback];
+                }
+            }
+
+            // 3) ถ้าไม่มีอะไรเลย → ใช้ fallback
+            if (empty($list) && $fallback) {
+                $list = [$fallback];
+            }
+
+            // 4) คืนรายการที่ clean แล้ว
+            return collect($list)
+                ->map(fn ($t) => preg_replace('/\s+/u', ' ', trim((string)$t)))
+                ->filter();
+        });
+
+        // 5) รวมซ้ำแบบ case-insensitive แต่เก็บ label ต้นฉบับไว้แสดง
+        $counts = collect();
+        foreach ($labels as $label) {
+            $key = mb_strtolower($label, 'UTF-8');
+            $counts[$key] = [
+                'symptom' => $label,
+                'total'   => ($counts[$key]['total'] ?? 0) + 1,
+            ];
         }
 
-        if ($type === 'referral') {
-            // นับราย question ใน ReferralGuidance
-            $query = ReferralGuidance::query()
-                ->select('question', 'question_code', 'question_title')
-                ->selectRaw('COUNT(*) as total')
-                ->groupBy('question', 'question_code', 'question_title')
-                ->orderBy('total', 'desc');
+        return $counts->values();
+    }
 
-            if ($start) $query->where('created_at', '>=', $start);
-            if ($end)   $query->where('created_at', '<=', $end);
+    /**
+     * เลือกข้อความแรกที่ไม่ว่าง และไม่ใช่ *_note / note
+     */
+    protected function pickCleanLabel(array $candidates): ?string
+    {
+        foreach ($candidates as $v) {
+            if (!is_string($v)) continue;
+            $t = trim($v);
+            if ($t === '') continue;
 
-            return $query->get();
+            // กรองโน้ตทุกแบบ
+            if (preg_match('/(^|_)note$/i', $t)) continue;
+
+            return $t;
         }
-
-        // type = null (all) -> รวม 2 แบบ แล้ว merge ใส่ key คนละรูปแบบ
-        return collect([
-            'formppk'  => $this->buildSummary('formppk', $start, $end),
-            'referral' => $this->buildSummary('referral', $start, $end),
-        ]);
+        return null;
     }
 }

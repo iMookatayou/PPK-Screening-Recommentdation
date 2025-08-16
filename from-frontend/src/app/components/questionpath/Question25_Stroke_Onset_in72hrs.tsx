@@ -23,60 +23,79 @@ export default function Question25_StrokeSuspect({ onResult, type }: Props) {
   const [timeCategory, setTimeCategory] = useState<'' | 'within72' | '72to14d' | 'over14d'>('')
   const [vitalStable, setVitalStable] = useState(false)
   const [note, setNote] = useState('')
-  const prevKey = useRef('')
+  const prevKey = useRef<string>('__INIT__')
 
   const getLabel = (val: string) => {
     switch (val) {
-      case 'within72':
-        return 'ภายใน 72 ชม.'
-      case '72to14d':
-        return '> 72 ชม. ถึง 2 สัปดาห์'
-      case 'over14d':
-        return '> 2 สัปดาห์ขึ้นไป'
-      default:
-        return ''
+      case 'within72': return 'ภายใน 72 ชม.'
+      case '72to14d': return '> 72 ชม. ถึง 2 สัปดาห์'
+      case 'over14d': return '> 2 สัปดาห์ขึ้นไป'
+      default: return ''
     }
   }
 
   useEffect(() => {
-    const symptoms = ['stroke_suspect']
-    const label = getLabel(timeCategory)
-
+    // ยังไม่เลือกช่วงเวลา → แจ้ง null แค่ครั้งเดียว
     if (!timeCategory) {
-      onResult(null)
+      if (prevKey.current !== 'EMPTY') {
+        prevKey.current = 'EMPTY'
+        onResult(null)
+      }
       return
     }
 
-    let clinic: string[] = []
+    // ตัดสินคลินิกตามเงื่อนไขในตาราง
+    let clinic: string[] | null = null
     if (timeCategory === 'within72') {
       clinic = ['er']
-    } else if ((timeCategory === '72to14d' || timeCategory === 'over14d') && vitalStable) {
-      clinic = timeCategory === '72to14d' ? ['med'] : ['muang']
-    } else {
-      onResult(null)
-      return
+    } else if (timeCategory === '72to14d') {
+      if (!vitalStable) {
+        if (prevKey.current !== 'WAIT_72to14') {
+          prevKey.current = 'WAIT_72to14'
+          onResult(null)
+        }
+        return
+      }
+      clinic = ['med']
+    } else if (timeCategory === 'over14d') {
+      if (!vitalStable) {
+        if (prevKey.current !== 'WAIT_over14') {
+          prevKey.current = 'WAIT_over14'
+          onResult(null)
+        }
+        return
+      }
+      clinic = ['muang']
     }
 
+    const label = getLabel(timeCategory)
     const trimmedNote = note.trim()
     const finalNote = `Onset: ${label}${trimmedNote ? ' - ' + trimmedNote : ''}`
-    const key = JSON.stringify({ clinic, finalNote, symptoms })
+    const symptoms = [
+      'stroke_suspect',
+      timeCategory,
+      ...(vitalStable ? ['vital_stable'] : []),
+      ...(trimmedNote ? ['stroke_onset_note'] : []),
+    ]
+    const isReferCase = true
 
+    const key = JSON.stringify({ clinic, finalNote, symptoms, isReferCase, type })
     if (prevKey.current !== key) {
       prevKey.current = key
-
       onResult({
         question: 'StrokeSuspect',
         question_code: 25,
         question_title: 'สงสัยภาวะ Stroke',
-        clinic,
+        clinic: clinic!,
         note: finalNote,
         symptoms,
-        isReferCase: true,
+        isReferCase,
         routedBy: 'auto',
-        type
+        type,
       })
     }
-  }, [timeCategory, vitalStable, note, type, onResult])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timeCategory, vitalStable, note, type]) // ไม่ใส่ onResult เพื่อกันลูป
 
   return (
     <div className="flex flex-col gap-3 text-sm">

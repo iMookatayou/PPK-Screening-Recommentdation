@@ -1,0 +1,289 @@
+/* Container */
+.container {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 16px;
+  background: #ffffff;
+}
+
+/* Title */
+.pageTitle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 3px solid #198754;
+  padding-bottom: 8px;
+  margin-bottom: 16px;
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #1f2937;
+}
+.titleIcon {
+  width: 22px;
+  height: 22px;
+  color: #198754;
+}
+
+/* Card */
+.card {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 12px;
+  background: #fff;
+  margin-bottom: 12px;
+}
+
+/* Grid */
+.row {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 12px;
+}
+.col12 { grid-column: span 12; }
+.col4  { grid-column: span 4; }
+.col3  { grid-column: span 3; }
+.col2  { grid-column: span 2; }
+
+.alignEnd { align-self: end; }
+
+/* Fields */
+.label {
+  font-size: .9rem;
+  margin-bottom: 4px;
+  color: #374151;
+  display: block;
+}
+.field {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: #fff;
+  font-size: 0.95rem;
+  outline: none;
+  transition: box-shadow .15s ease, border-color .15s ease;
+}
+.field:focus {
+  border-color: #198754;
+  box-shadow: 0 0 0 3px rgba(25,135,84,0.15);
+}
+
+/* Input with Icon */
+.inputWithIcon { position: relative; }
+.inputIcon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  color: #6b7280;
+  pointer-events: none;
+}
+.inputWithIcon .field { padding-left: 34px; }
+
+/* Text helpers */
+.muted { color: #6b7280; font-size: 0. nine 0rem; }
+.block { display: block; }
+.blockTop { margin-top: 8px; }
+
+.sectionTitle {
+  font-weight: 600;
+  margin-top: 8px;
+  margin-bottom: 6px;
+  color: #111827;
+}
+
+/* Buttons */
+.btn {
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #d1d5db;
+  background: #fff;
+  cursor: pointer;
+  font-size: 0.95rem;
+  transition: background-color .15s ease, color .15s ease, border-color .15s ease, width .18s ease;
+}
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+
+.btnPrimary {
+  background: #198754;
+  color: #fff;
+  border-color: #198754;
+}
+.btnPrimary:hover:not(:disabled) {
+  background: #157347;
+  border-color: #157347;
+}
+.btnPrimary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(25,135,84,0.2);
+}
+
+/* ปุ่ม “ยืด” ตอนกำลังค้นหา */
+.btnLoading {
+  min-width: 164px;      /* ทำให้เห็นการยืดชัดเจน */
+  letter-spacing: .2px;
+}
+
+/* ปุ่มคงที่ ไม่ยืดไม่หด ไม่ขึ้นบรรทัดใหม่ */
+.btnFixed {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 168px;              /* 🔒 ความกว้างตายตัว (ปรับได้ตามใจ) */
+  padding: 10px 12px;
+  white-space: nowrap;
+}
+
+/* กล่องข้อความในปุ่ม: ซ้อนสองชั้นทับกัน */
+.btnLabel {
+  position: relative;
+  display: block;
+  line-height: 1;            /* ให้สูงคงที่ */
+  height: 1em;               /* ความสูงยึดตามฟอนต์ */
+}
+
+/* ข้อความสองสถานะวางทับกันตรงกลาง */
+.labelIdle,
+.labelBusy {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+  transition: opacity .15s ease;
+}
+
+/* ค่าเริ่มต้น: โชว์ "ค้นหา" */
+.labelBusy { opacity: 0; }
+
+/* ตอนโหลด: ซ่อน "ค้นหา" โชว์ "กำลังค้นหา..." โดยความกว้างปุ่มไม่เปลี่ยน */
+.btnLabel[data-loading="1"] .labelIdle { opacity: 0; }
+.btnLabel[data-loading="1"] .labelBusy { opacity: 1; }
+
+
+/* Pagination */
+.pageBtn { margin-right: 6px; }
+.pageBtnActive { background: #e5e7eb; }
+
+/* Table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #fff;
+}
+.table thead th {
+  background: #198754;
+  color: #fff;
+  padding: 10px;
+  text-align: left;
+  font-weight: 600;
+}
+.table tbody td {
+  border-top: 1px solid #e5e7eb;
+  padding: 8px;
+  vertical-align: top;
+}
+.tableEmpty {
+  text-align: center;
+  color: #6b7280;
+  padding: 12px;
+}
+
+/* Chips */
+.chip {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  margin-right: 6px;
+  margin-bottom: 4px;
+  font-size: .85rem;
+}
+
+/* Detail QR item (เหลือเวอร์ชันเดียว — ลบของซ้ำออกแล้ว) */
+.qrItem {
+  padding: 10px 0;
+  border-bottom: 1px dashed #e5e7eb;
+}
+.qrItem:last-child { border-bottom: 0; }
+
+/* Pagination wrapper */
+.pagination { margin-top: 8px; }
+
+/* Error text */
+.errorText {
+  color: #b91c1c;
+  margin-top: 8px;
+}
+
+/* ตารางเลื่อนบนจอแท็บเล็ต */
+.tableWrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* ปุ่มค้นหา “ตายตัว” มุมขวาบนของการ์ด */
+.stickySearch {
+  position: sticky;
+  top: 12px;
+  align-self: flex-end;
+  z-index: 2;
+}
+
+/* เส้นแบ่งมี animation */
+.hr {
+  border: 0;
+  border-top: 1px solid #e5e7eb;
+  margin: 8px 0 12px;
+  transform-origin: left center;
+}
+
+/* หัวข้อย่อย */
+.sectionTitleSub {
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+/* ---------- iPad: 768–1024px ---------- */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .container { padding: 20px; }
+
+  .row { gap: 14px; }
+  .col4 { grid-column: span 6; }
+  .col3 { grid-column: span 6; }
+  .col2 { grid-column: span 6; }
+  .col12 { grid-column: span 12; }
+
+  .pageTitle { font-size: 1.2rem; padding-bottom: 10px; }
+  .titleIcon { width: 24px; height: 24px; }
+
+  .field { min-height: 44px; font-size: 1rem; }
+  .btn { min-height: 44px; font-size: 1rem; }
+  .btnPrimary { font-weight: 600; }
+
+  .table thead th { padding: 12px; white-space: nowrap; }
+  .table tbody td { padding: 12px 10px; white-space: nowrap; }
+
+  .pagination { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pageBtn { min-width: 40px; min-height: 40px; }
+}
+
+/* ---------- iPad แนวตั้ง (≤ 820px) ---------- */
+@media (min-width: 768px) and (max-width: 820px) {
+  .pageTitle { font-size: 1.15rem; }
+  .col4 { grid-column: span 12; } /* CID เต็มแถว */
+  .col3 { grid-column: span 6; }  /* range / start */
+  .col2 { grid-column: span 6; }  /* end / ปุ่มค้นหา */
+}
+
+/* ---------- Mobile < 640px ---------- */
+@media (max-width: 640px) {
+  .field, .btn { min-height: 44px; }
+  .pageBtn { min-width: 38px; min-height: 38px; }
+  .btnFixed,
+  .btnLoading { width: 100%; }
+}

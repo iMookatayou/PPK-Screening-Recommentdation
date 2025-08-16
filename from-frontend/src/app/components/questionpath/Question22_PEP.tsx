@@ -25,35 +25,19 @@ export default function Question22_PEP({ onResult, type }: Props) {
   const prevKey = useRef('')
 
   useEffect(() => {
-    const symptoms = ['occupational_pep']
-    const noteParts: string[] = []
+    const trimmed = note.trim()
 
-    if (note.trim()) {
-      noteParts.push(`รายละเอียดเพิ่มเติม: ${note.trim()}`)
-      symptoms.push('custom_note')
-    }
-
-    if (isAfterHours) {
-      noteParts.push('กรณีนอกเวลาราชการ')
-    }
-
+    const symptoms = ['occupational_pep', ...(trimmed ? ['custom_note'] : [])]
     const finalNote =
-      noteParts.length > 0
-        ? noteParts.join(' | ')
-        : 'ขอรับ PEP เจ้าหน้าที่'
+      trimmed ? `${trimmed}` : 'ขอรับ PEP เจ้าหน้าที่'
 
+    // ในเวลาราชการไปอาชีวเวชกรรม นอกเวลาราชการไป ER
     const clinic = isAfterHours ? ['er'] : ['occmed']
+    const isReferCase = true
 
-    const key = JSON.stringify({ clinic, finalNote, symptoms })
-
+    const key = JSON.stringify({ clinic, finalNote, symptoms, isReferCase, type })
     if (prevKey.current !== key) {
       prevKey.current = key
-
-      if (!note.trim()) {
-        onResult(null)
-        return
-      }
-
       onResult({
         question: 'OccupationalPEP',
         question_code: 22,
@@ -61,7 +45,7 @@ export default function Question22_PEP({ onResult, type }: Props) {
         clinic,
         note: finalNote,
         symptoms,
-        isReferCase: true,
+        isReferCase,
         routedBy: 'auto',
         type,
       })

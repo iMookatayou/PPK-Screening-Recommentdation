@@ -1,13 +1,13 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
-export interface Question22Result {
+export interface Question23Result {
   question: string
   question_code: number
   question_title: string
   clinic: string[]
-  note: string
+  note?: string
   symptoms: string[]
   isReferCase: boolean
   routedBy: 'auto'
@@ -15,84 +15,65 @@ export interface Question22Result {
 }
 
 interface Props {
-  onResult: (result: Question22Result | null) => void
+  onResult: (result: Question23Result | null) => void
   type: string
 }
 
-export default function Question22_PEP({ onResult, type }: Props) {
+export default function Question23_JawLock({ onResult, type }: Props) {
+  const [isReferCase, setIsReferCase] = useState(false)
   const [note, setNote] = useState('')
-  const [isAfterHours, setIsAfterHours] = useState(false)
-  const prevKey = useRef('')
+
+  // กันลูป onResult
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
 
   useEffect(() => {
-    const symptoms = ['occupational_pep']
-    const noteParts: string[] = []
+    const clinic = ['er'] // ขากรรไกรค้าง → ER
+    const symptoms = ['jaw_lock', isReferCase ? 'refer_case' : 'new_case']
+    if (note.trim()) symptoms.push('custom_note')
 
-    if (isAfterHours) {
-      noteParts.push('กรณีนอกเวลาราชการ')
-    }
-    if (note.trim()) {
-      noteParts.push(note.trim())
-    }
-
-    const finalNote = noteParts.join(' | ')
-    const clinic = isAfterHours ? ['er'] : ['occmed']
-
-    // กันการยิงซ้ำ
-    const key = JSON.stringify({ clinic, finalNote, symptoms })
-    if (prevKey.current !== key) {
-      prevKey.current = key
-
-      if (!finalNote.trim()) {
-        onResult(null)
-        return
-      }
-
-      onResult({
-        question: 'OccupationalPEP',
-        question_code: 22,
-        question_title: 'PEP สำหรับเจ้าหน้าที่ (Occupational PEP)',
-        clinic,
-        note: finalNote,
-        symptoms,
-        isReferCase: true,
-        routedBy: 'auto',
-        type
-      })
-    }
-  }, [note, isAfterHours, type, onResult])
+    onResultRef.current({
+      question: 'JawLock',
+      question_code: 23,
+      question_title: 'ขากรรไกรค้าง (New / Refer)',
+      clinic,
+      note: note.trim() || undefined,
+      symptoms,
+      isReferCase,
+      routedBy: 'auto',
+      type,
+    })
+  }, [isReferCase, note, type])
 
   return (
-    <div className="flex flex-col gap-2 text-sm">
-      <p className="text-gray-700 leading-relaxed">
-        PEP สำหรับเจ้าหน้าที่ (รวมทั้งเจ้าหน้าที่จาก รพช./รพท.)
+    <div className="space-y-3 text-sm text-gray-800">
+      <p className="leading-relaxed">
+        ขากรรไกรค้าง
       </p>
 
-      <div className="flex items-center gap-2">
+      <label className="inline-flex items-center gap-2">
         <input
           type="checkbox"
-          id="afterHours"
-          checked={isAfterHours}
-          onChange={(e) => setIsAfterHours(e.target.checked)}
-          className="accent-blue-600"
+          checked={isReferCase}
+          onChange={(e) => setIsReferCase(e.target.checked)}
+          className="w-4 h-4"
         />
-        <label htmlFor="afterHours" className="text-gray-800 font-medium">
-          กรณีนอกเวลาราชการ (จะส่งตรวจที่ ER)
-        </label>
-      </div>
-
-      <label htmlFor="note" className="block font-medium mt-2 mb-1">
-        หมายเหตุเพิ่มเติม (ถ้ามี)
+        <span>Case Refer</span>
       </label>
-      <textarea
-        id="note"
-        title="หมายเหตุเพิ่มเติม"
-        className="w-full border border-gray-300 rounded px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-blue-500"
-        rows={2}
-        placeholder="บันทึกรายละเอียดเพิ่มเติม"
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-      />
+
+      <div>
+        <label htmlFor="note" className="block font-medium mt-2 mb-1">
+          หมายเหตุเพิ่มเติม (ถ้ามี)
+        </label>
+        <textarea
+          id="note"
+          rows={2}
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="เช่น ระยะเวลาที่ค้าง ล็อกซ้าย/ขวา เคยเป็นมาก่อน ฯลฯ"
+          className="w-full border border-gray-300 rounded px-3 py-2"
+        />
+      </div>
     </div>
   )
 }

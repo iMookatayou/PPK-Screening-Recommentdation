@@ -8,26 +8,31 @@ return new class extends Migration {
     public function up(): void
     {
         Schema::create('question_results', function (Blueprint $table) {
+            $table->engine = 'InnoDB';
+
             $table->id();
 
-            $table->string('case_id')->index();              // FK เชื่อมกับ patient_cases
-            $table->string('question');                      // โค้ดคำถาม เช่น StrokeSuspect
-            $table->string('question_key');                  // เช่น Question1
-            $table->integer('question_code');                // เช่น 1
-            $table->string('question_title');                // ชื่อคำถาม
+            // สร้างคอลัมน์ FK แต่ยังไม่ constrain ตอนนี้
+            $table->unsignedBigInteger('patient_case_id')->index();
 
-            $table->json('clinic');                          // หลายคลินิก เช่น ["er", "surgery"]
-            $table->json('symptoms')->nullable();            // อาการ
-            $table->text('note')->nullable();                // หมายเหตุ
+            $table->string('case_id')->index();
 
-            $table->boolean('is_refer_case')->default(false);// เป็นเคสส่งต่อหรือไม่
-            $table->string('type')->default('form');         // ประเภท ('form', 'guide', etc.)
-            $table->string('routed_by')->nullable();         // ถูก route โดยใคร
+            $table->string('question');
+            $table->string('question_key');
+            $table->integer('question_code');
+            $table->string('question_title');
 
-            $table->timestamp('created_at')->nullable();     // created_at ที่มากับข้อมูล
-            $table->timestamp('updated_at')->nullable();     // สำหรับอัปเดตภายหลัง (auto)
+            $table->json('clinic');
+            $table->json('symptoms')->nullable();
+            $table->text('note')->nullable();
 
-            // $table->foreign('case_id')->references('case_id')->on('patient_cases')->onDelete('cascade');
+            $table->boolean('is_refer_case')->default(false);
+            $table->string('type')->default('form');
+            $table->string('routed_by')->nullable();
+
+            $table->timestamps();
+
+            $table->index(['type', 'created_at']);
         });
     }
 

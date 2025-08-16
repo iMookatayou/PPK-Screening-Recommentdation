@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 return new class extends Migration {
     public function up(): void
     {
+        // ========== users ==========
         Schema::create('users', function (Blueprint $table) {
             $table->id();
 
@@ -21,61 +22,93 @@ return new class extends Migration {
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
 
+            // สถานะการใช้งาน/สิทธิ์
             $table->enum('status', ['pending', 'approved', 'rejected'])->default('pending')->index();
             $table->enum('role', ['user', 'admin'])->default('user')->index();
+
+            // การสมัครใหม่ (re-apply)
+            $table->boolean('reapply_allowed')->default(false)->index();
+            $table->date('reapply_until')->nullable()->index();
 
             // อนุมัติ/ปฏิเสธ
             $table->timestamp('approved_at')->nullable()->index();
             $table->string('rejected_reason', 255)->nullable();
 
-            // บันทึกการใช้งาน (ถ้าต้องการ ใช้ในอนาคต)
-            // $table->timestamp('last_login_at')->nullable()->index();
-            // $table->unsignedInteger('login_count')->default(0);
-
             // Laravel features
             $table->rememberToken();
             $table->timestamps();
-            // $table->softDeletes(); // เปิดถ้าต้องการลบแบบ soft
         });
 
+        // CHECK สำหรับ CID (ข้ามถ้า DB ไม่รองรับ CHECK)
         try {
-            DB::statement("ALTER TABLE `users` 
-                ADD CONSTRAINT `chk_users_cid` 
+            DB::statement("ALTER TABLE `users`
+                ADD CONSTRAINT `chk_users_cid`
                 CHECK (`cid` REGEXP '^[0-9]{13}$')");
         } catch (\Throwable $e) {
-            // ถ้าฐานไม่รองรับ CHECK ก็ข้ามได้ ไปบังคับใน validation ชั้นแอปแทน
+            // noop
         }
 
+        // ดัชนีเสริมเพื่อหน้าอนุมัติ/ค้นหาโหลดไวขึ้น
+        Schema::table('users', function (Blueprint $table) {
+            $table->index(['status', 'created_at'], 'users_status_created_idx');
+            $table->index('cid');
+            $table->index('first_name');
+            $table->index('last_name');
+            $table->index('email');
+        });
+
+        // ========== password_reset_tokens ==========
         Schema::create('password_reset_tokens', function (Blueprint $table) {
-            $table->string('email')->primary();
+            $table->string('email', 255)->primary();
             $table->string('token');
             $table->timestamp('created_at')->nullable();
         });
 
+        // ========== sessions ==========
         Schema::create('sessions', function (Blueprint $table) {
             $table->string('id')->primary();
-            $table->foreignId('user_id')->nullable()->index();
+            $table->foreignId('user_id')
+                  ->nullable()
+                  ->constrained('users')
+                  ->nullOnDelete();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
             $table->longText('payload');
             $table->integer('last_activity')->index();
         });
 
-        // ดัชนีเสริมเพื่อหน้าอนุมัติ/รายการผู้ใช้โหลดไวขึ้น
-        Schema::table('users', function (Blueprint $table) {
-            $table->index(['status', 'created_at'], 'users_status_created_idx');
+        // ========== personal_access_tokens (Sanctum) ==========
+        Schema::create('personal_access_tokens', function (Blueprint $table) {
+            $table->bigIncrements('id');
+            $table->morphs('tokenable');
+            $table->string('name');
+            $table->string('token', 64)->unique();
+            $table->text('abilities')->nullable();
+            $table->timestamp('last_used_at')->nullable();
+            $table->timestamp('expires_at')->nullable();
+            $table->timestamps();
         });
     }
 
     public function down(): void
     {
-        // ลบดัชนีเสริมก่อน (กันบาง DB บ่น)
-        Schema::table('users', function (Blueprint $table) {
-            $table->dropIndex('users_status_created_idx');
-        });
-
+        // ตารางที่อ้างอิง users ต้องถูกลบก่อน
+        Schema::dropIfExists('personal_access_tokens');
         Schema::dropIfExists('sessions');
         Schema::dropIfExists('password_reset_tokens');
+
+        // ลบดัชนีเสริมก่อน (กันบาง DB บ่น)
+        Schema::table('users', function (Blueprint $table) {
+            if (Schema::hasColumn('users', 'created_at')) {
+                $table->dropIndex('users_status_created_idx');
+            }
+            // ดัชนีทั่วไป (Laravel จะตั้งชื่ออัตโนมัติ ถ้าลบไม่ได้จะไม่พัง)
+            try { $table->dropIndex(['cid']); } catch (\Throwable $e) {}
+            try { $table->dropIndex(['first_name']); } catch (\Throwable $e) {}
+            try { $table->dropIndex(['last_name']); } catch (\Throwable $e) {}
+            try { $table->dropIndex(['email']); } catch (\Throwable $e) {}
+        });
+
         Schema::dropIfExists('users');
     }
 };

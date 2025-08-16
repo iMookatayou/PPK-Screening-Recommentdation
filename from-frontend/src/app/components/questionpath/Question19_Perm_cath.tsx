@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { getThaiDayName } from '@/lib/dateUtils'
 
 export interface Question19Result {
   question: string
@@ -24,27 +23,18 @@ export default function Question19_PermCath({ onResult, type }: Props) {
   const [note, setNote] = useState('')
   const prevKey = useRef<string>('')
 
-  const todayName = getThaiDayName()
-
   useEffect(() => {
     const trimmedNote = note.trim()
     const symptoms: string[] = ['perm_cath_wound']
-    if (trimmedNote) symptoms.push('custom_note')
+    if (trimmedNote) symptoms.push('perm_cath_note')
 
     const finalNote = trimmedNote || 'ติดตามแผล Perm-Cath'
     const clinic = ['med']
     const isReferCase = true
 
-    const resultKey = JSON.stringify({ finalNote, clinic, symptoms, isReferCase })
-
+    const resultKey = JSON.stringify({ finalNote, clinic, symptoms, isReferCase, type })
     if (prevKey.current !== resultKey) {
       prevKey.current = resultKey
-
-      if (!trimmedNote && symptoms.length <= 1) {
-        onResult(null)
-        return
-      }
-
       onResult({
         question: 'PermCathFollowup',
         question_code: 19,

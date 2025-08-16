@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { getThaiDayNumber } from '@/lib/dateUtils'
 
 interface CSpineInjuryResult {
@@ -12,39 +12,54 @@ interface CSpineInjuryResult {
   symptoms: string[]
   routedBy: 'auto-day'
   dayOfWeek: number
-  type: string 
+  type: string
 }
 
 interface CSpineInjuryProps {
   onResult: (result: CSpineInjuryResult) => void
-  type: string 
+  type: string
 }
 
 export default function Question2_CSpineInjury({ onResult, type }: CSpineInjuryProps) {
-  const [clinic, setClinic] = useState<string>('')
   const [note, setNote] = useState<string>('')
+
+  // กันลูป: เก็บ callback ไว้ใน ref
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+
+  // กันสแปม: ส่งเฉพาะตอน payload เปลี่ยนจริง
+  const prevKeyRef = useRef<string>('__INIT__')
 
   useEffect(() => {
     const day = getThaiDayNumber()
     const routedClinic = (day === 2 || day === 4) ? 'surg' : 'ortho' // อังคาร/พฤหัส → surg
-    setClinic(routedClinic)
 
     const symptoms: string[] = ['cspine_injury']
-    if (note.trim()) symptoms.push('cspine_injury_note')
+    const noteParts: string[] = []
+    const extra = note.trim()
+    if (extra) {
+      noteParts.push(extra)
+      symptoms.push('cspine_injury_note')
+    }
+    const finalNote = noteParts.join(' | ') || undefined
 
-    onResult({
+    const payload: CSpineInjuryResult = {
       question: 'CSpineInjury',
       question_code: 2,
       question_title: 'บาดเจ็บบริเวณกระดูกคอ',
       clinic: [routedClinic],
-      note: note.trim() !== '' ? note.trim() : undefined,
+      note: finalNote,
       symptoms,
       routedBy: 'auto-day',
       dayOfWeek: day,
-      type, 
-    })
+      type,
+    }
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const key = JSON.stringify(payload)
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResultRef.current(payload)
+    }
   }, [note, type])
 
   return (
@@ -59,7 +74,7 @@ export default function Question2_CSpineInjury({ onResult, type }: CSpineInjuryP
           value={note}
           onChange={(e) => setNote(e.target.value)}
           rows={2}
-          placeholder="ใส่รายละเอียดอื่น ๆ..."
+          placeholder="ใส่รายละเอียดเพิ่มเติม"
           className="w-full border border-gray-300 rounded px-3 py-2"
         />
       </div>

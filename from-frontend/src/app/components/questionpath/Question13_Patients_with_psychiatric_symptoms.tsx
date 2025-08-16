@@ -7,10 +7,11 @@ export interface Question13Result {
   question_code: number
   question_title: string
   clinic: string[]
-  note: string
+  note?: string
   symptoms: string[]
-  isReferCase: boolean
   type: string
+  // isReferCase: ไม่มีช้อย refer → ไม่ต้องส่ง
+  // isReferCase?: boolean
 }
 
 interface PsychCaseProps {
@@ -22,16 +23,24 @@ export default function Question13_PsychCase({ onResult, type }: PsychCaseProps)
   const [caseType, setCaseType] = useState<'' | 'new' | 'old'>('')
   const [hasPhysicalSymptom, setHasPhysicalSymptom] = useState(false)
   const [extraNote, setExtraNote] = useState('')
-  const prevKeyRef = useRef('')
+
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+
+  const prevKeyRef = useRef<string>('__INIT__')
 
   useEffect(() => {
+    // ยังไม่เลือกประเภท → ส่ง null ครั้งเดียว
     if (!caseType) {
-      onResult(null)
+      if (prevKeyRef.current !== 'EMPTY') {
+        prevKeyRef.current = 'EMPTY'
+        onResultRef.current(null)
+      }
       return
     }
 
+    // ===== สร้าง payload =====
     let clinic: string[] = []
-    let isReferCase = false
     const symptoms: string[] = ['psych_case']
     const noteParts: string[] = []
 
@@ -39,13 +48,11 @@ export default function Question13_PsychCase({ onResult, type }: PsychCaseProps)
       clinic = ['psych']
       noteParts.push('New case: vital sign ปกติ, DTX ปกติ, ไม่มีอาการก้าวร้าว')
       symptoms.push('new_case', 'no_physical')
-    } else if (caseType === 'old') {
+    } else {
+      // old case
       if (hasPhysicalSymptom) {
         clinic = ['muang']
-        isReferCase = true
-        noteParts.push(
-          'Old case: มาด้วยอาการเจ็บป่วยทางกาย vital sign, DTX ปกติ (ส่งรพ.เมือง หรือห้องตรวจตามอาการสำคัญ)'
-        )
+        noteParts.push('Old case: มาด้วยอาการเจ็บป่วยทางกาย vital sign, DTX ปกติ (ส่งรพ.เมือง หรือห้องตรวจตามอาการสำคัญ)')
         symptoms.push('old_case', 'has_physical')
       } else {
         clinic = ['psych']
@@ -54,27 +61,30 @@ export default function Question13_PsychCase({ onResult, type }: PsychCaseProps)
       }
     }
 
-    if (extraNote.trim()) {
-      noteParts.push(extraNote.trim())
+    const extra = extraNote.trim()
+    if (extra) {
+      noteParts.push(extra)
+      symptoms.push('psych_note')
     }
 
-    const note = noteParts.join(' | ')
-    const key = `${caseType}-${hasPhysicalSymptom}-${extraNote.trim()}`
+    const note = noteParts.join(' | ') || undefined
 
+    const payload: Question13Result = {
+      question: 'PsychCase',
+      question_code: 13,
+      question_title: 'ผู้ป่วยจิตเวช (ใหม่/เก่า)',
+      clinic,
+      note,
+      symptoms,
+      type,
+    }
+
+    const key = JSON.stringify(payload)
     if (prevKeyRef.current !== key) {
       prevKeyRef.current = key
-      onResult({
-        question: 'PsychCase',
-        question_code: 13,
-        question_title: 'ผู้ป่วยจิตเวช (ใหม่/เก่า)',
-        clinic,
-        note,
-        symptoms,
-        isReferCase,
-        type,
-      })
+      onResultRef.current(payload)
     }
-  }, [caseType, hasPhysicalSymptom, extraNote, type, onResult])
+  }, [caseType, hasPhysicalSymptom, extraNote, type])
 
   return (
     <div className="space-y-4 text-sm">
@@ -90,9 +100,7 @@ export default function Question13_PsychCase({ onResult, type }: PsychCaseProps)
           className="w-full border px-3 py-2 rounded"
         >
           <option value="">-- เลือกประเภท --</option>
-          <option value="new">
-            New case (Vital sign, DTX ปกติ ไม่มีอาการก้าวร้าว)
-          </option>
+          <option value="new">New case (Vital sign, DTX ปกติ ไม่มีอาการก้าวร้าว)</option>
           <option value="old">Old case</option>
         </select>
       </div>

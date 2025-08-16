@@ -48,13 +48,13 @@ export default function Question20_CompartmentSyndrome({ onResult, type }: Props
       const labels = symptomOptions
         .filter((opt) => selectedSymptoms.includes(opt.value))
         .map((opt) => opt.label)
-      noteParts.push(`อาการ: ${labels.join(', ')}`)
+      noteParts.push(`${labels.join(', ')}`)
       symptoms.push(...selectedSymptoms)
     }
 
     if (additionalNote.trim()) {
-      noteParts.push(`เพิ่มเติม: ${additionalNote.trim()}`)
-      symptoms.push('custom_note')
+      noteParts.push(`${additionalNote.trim()}`)
+      symptoms.push('clompartment_note')
     }
 
     const note = noteParts.length > 0 ? noteParts.join(' | ') : 'สงสัย Compartment Syndrome (ส่ง ER ด่วน)'

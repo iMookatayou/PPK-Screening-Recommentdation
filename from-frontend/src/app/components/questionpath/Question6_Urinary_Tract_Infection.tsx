@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import Select from 'react-select'
 import { clinicLabelMap } from '@/app/components/questionpath/clinicLabelMap'
 
@@ -11,56 +11,76 @@ export interface Question6Result {
   clinic: string[]
   note?: string
   symptoms: string[]
-  isReferCase: boolean
   type: string
 }
 
 interface Question6Props {
-  frontAgentGender?: '1' | '2'
+  frontAgentGender?: '1' | '2' | '3'
   onResult: (result: Question6Result | null) => void
   type: string
 }
 
+type ClinicKey = 'surg' | 'muang' | 'uro'
+type ClinicOption = { value: ClinicKey; label: string }
+
 export default function Question6_UTI({
-  frontAgentGender = '1',
+  frontAgentGender,
   onResult,
   type,
 }: Question6Props) {
-  const [gender, setGender] = useState<'1' | '2' | '3'>(frontAgentGender)
+  // ---------- STATE ----------
+  const [gender, setGender] = useState<'1' | '2' | '3' | null>(
+    typeof frontAgentGender === 'string' ? frontAgentGender : null
+  )
   const [hasProstateIssue, setHasProstateIssue] = useState(false)
   const [hasUrinaryRetention, setHasUrinaryRetention] = useState(false)
-  const [customClinic, setCustomClinic] = useState<string | null>(null)
+  const [customClinic, setCustomClinic] = useState<ClinicKey | null>(null)
   const [extraNote, setExtraNote] = useState('')
-  const prevKeyRef = useRef('')
 
-  // เวลาไทย
+  // ---------- CALLBACK REFS ----------
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+  const lastKeyRef = useRef<string>('__INIT__')
+
+  // ---------- TIME LOGIC (URO เฉพาะ อ./พฤ. 08–12) ----------
   const now = new Date()
-  const bangkokTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
-  const thaiDay = bangkokTime.getDay() // 0=Sun, ..., 2=Tue, 4=Thu
-  const hour = bangkokTime.getHours()
+  const bkk = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Bangkok' }))
+  const thaiDay = bkk.getDay()
+  const hour = bkk.getHours()
+  const isTueThuMorning = (thaiDay === 2 || thaiDay === 4) && hour >= 8 && hour < 12
 
-  const isTuesdayOrThursdayMorning = (thaiDay === 2 || thaiDay === 4) && hour >= 8 && hour < 12
-
-  // ตัวเลือก clinic สำหรับกรณีเพศไม่ระบุ
-  const clinicOptions = [
+  // ---------- OPD OPTIONS ----------
+  const clinicOptions: ClinicOption[] = [
     { value: 'surg', label: clinicLabelMap['surg'] },
     { value: 'muang', label: clinicLabelMap['muang'] },
-    ...(isTuesdayOrThursdayMorning ? [{ value: 'uro', label: clinicLabelMap['uro'] }] : []),
+    ...(isTueThuMorning ? [{ value: 'uro', label: clinicLabelMap['uro'] } as ClinicOption] : []),
   ]
 
+  // ---------- DEFAULT CLINIC เมื่อ gender = '3' ----------
   useEffect(() => {
-    let clinic: string[] = []
-    let isReferCase = true
+    if (gender === '3' && !customClinic) {
+      setCustomClinic('surg')
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gender, isTueThuMorning])
+
+  const emitNullOnce = (tag: string) => {
+    if (lastKeyRef.current !== tag) {
+      lastKeyRef.current = tag
+      onResultRef.current(null)
+    }
+  }
+
+  // ---------- BUILD RESULT (ไม่บังคับติ๊ก checkbox สำหรับเพศชาย) ----------
+  const result = useMemo<Question6Result | null>(() => {
+    if (gender === null) return null
+
     const symptoms: string[] = ['uti']
-    const noteParts: string[] = ['UTI']
+    const noteParts: string[] = []
+    let clinic: string[] = []
 
     if (gender === '1') {
-      const hasAnySymptom = hasProstateIssue || hasUrinaryRetention
-      if (!hasAnySymptom) {
-        onResult(null)
-        return
-      }
-
+      // ผู้ชาย: ไม่บังคับติ๊กอาการ
       if (hasProstateIssue) {
         symptoms.push('prostate_issue')
         noteParts.push('สงสัยต่อมลูกหมากโต')
@@ -69,50 +89,64 @@ export default function Question6_UTI({
         symptoms.push('urinary_retention')
         noteParts.push('ปัสสาวะขัด/ไม่สุด')
       }
-
-      clinic = isTuesdayOrThursdayMorning ? ['uro'] : ['surg']
+      clinic = isTueThuMorning ? ['uro'] : ['surg']
     } else if (gender === '2') {
       clinic = ['muang']
     } else if (gender === '3') {
-      if (!customClinic) {
-        onResult(null)
-        return
-      }
+      if (!customClinic) return null
       clinic = [customClinic]
-      noteParts.push(`เลือกแผนก: ${clinicLabelMap[customClinic] || customClinic}`)
-    } else {
-      onResult(null)
+    }
+
+    const extra = extraNote.trim()
+    if (extra) {
+      noteParts.push(extra)
+      symptoms.push('uti_note')
+    }
+
+    const note = noteParts.length ? noteParts.join(' | ') : undefined
+
+    return {
+      question: 'UTICase',
+      question_code: 6,
+      question_title: 'ทางเดินปัสสาวะ (UTI)',
+      clinic,
+      note,
+      symptoms,
+      type,
+    }
+  }, [gender, hasProstateIssue, hasUrinaryRetention, customClinic, extraNote, type, isTueThuMorning])
+
+  // ---------- EMIT ----------
+  useEffect(() => {
+    if (gender === null) return emitNullOnce('WAIT_GENDER')
+    if (gender === '3' && !customClinic) return emitNullOnce('WAIT_UNKNOWN_CLINIC')
+
+    const key = result ? JSON.stringify(result) : 'NULL'
+    if (lastKeyRef.current !== key) {
+      lastKeyRef.current = key
+      onResultRef.current(result)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [result, gender, customClinic])
+
+  // ---------- HANDLERS ----------
+  const handleGenderChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const raw = e.target.value
+    const v = (raw || null) as '1' | '2' | '3' | null
+
+    if (v === null) {
+      setGender(null)
+      setCustomClinic(null)
+      setHasProstateIssue(false)
+      setHasUrinaryRetention(false)
+      setExtraNote('')
+      emitNullOnce('WAIT_GENDER')
       return
     }
 
-    if (extraNote.trim()) {
-      noteParts.push(extraNote.trim())
-    }
-
-    const finalNote = noteParts.join(' | ')
-    const key = `${gender}|${clinic.join(',')}|${symptoms.join(',')}|${finalNote}`
-
-    if (prevKeyRef.current !== key) {
-      prevKeyRef.current = key
-      onResult({
-        question: 'UTICase',
-        question_code: 6,
-        question_title: 'ทางเดินปัสสาวะ (UTI)',
-        clinic,
-        note: finalNote,
-        symptoms,
-        isReferCase,
-        type,
-      })
-    }
-  }, [
-    gender,
-    hasProstateIssue,
-    hasUrinaryRetention,
-    customClinic,
-    extraNote,
-    type,
-  ])
+    setGender(v)
+    if (v !== '3') setCustomClinic(null)
+  }
 
   return (
     <div className="space-y-4 text-sm">
@@ -123,13 +157,11 @@ export default function Question6_UTI({
         </label>
         <select
           id="genderSelect"
-          value={gender}
-          onChange={(e) => {
-            setGender(e.target.value as '1' | '2' | '3')
-            setCustomClinic(null)
-          }}
+          value={gender ?? ''}
+          onChange={handleGenderChange}
           className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm"
         >
+          <option value="">— เลือกเพศ —</option>
           <option value="1">ชาย</option>
           <option value="2">หญิง</option>
           <option value="3">ไม่ทราบแน่ชัด</option>
@@ -161,18 +193,22 @@ export default function Question6_UTI({
         </div>
       )}
 
-      {/* เลือกแผนกเอง (เฉพาะเพศไม่ระบุ) */}
+      {/* เลือกแผนก (เฉพาะเพศไม่ทราบแน่ชัด) */}
       {gender === '3' && (
         <div className="space-y-2">
           <label className="block font-medium text-gray-700 mb-1">
             เลือกแผนกที่ต้องการส่งต่อ
           </label>
-          <Select
+          <Select<ClinicOption, false>
+            isClearable
             options={clinicOptions}
             placeholder="ค้นหาและเลือกแผนก..."
-            value={clinicOptions.find((c) => c.value === customClinic) || null}
-            onChange={(selected) => setCustomClinic(selected?.value ?? null)}
-            isClearable
+            value={
+              customClinic
+                ? clinicOptions.find((opt) => opt.value === customClinic) || null
+                : null
+            }
+            onChange={(selected) => setCustomClinic(selected ? selected.value : null)}
             className="text-sm"
           />
         </div>

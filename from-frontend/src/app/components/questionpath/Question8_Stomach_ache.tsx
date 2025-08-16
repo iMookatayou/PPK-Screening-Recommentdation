@@ -9,10 +9,11 @@ export interface Question8Result {
   question_code: number
   question_title: string
   clinic: string[]
-  note: string
+  note?: string
   symptoms: string[]
-  isReferCase: boolean
   type: string
+  // isReferCase: ไม่ใช่ช้อย refer → ไม่ต้องส่ง
+  isReferCase?: boolean
 }
 
 interface Question8Props {
@@ -25,59 +26,67 @@ export default function Question8_Stomach_ache({ onResult, type }: Question8Prop
   const [painScale, setPainScale] = useState<number>(3)
   const [noteExtra, setNoteExtra] = useState<string>('')
 
-  const prevKeyRef = useRef<string | null>(null)
+  // กันลูป & กันยิงซ้ำ
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
+  const prevKeyRef = useRef<string>('__INIT__')
 
   useEffect(() => {
+    // ยังไม่เลือกอาการ → ส่ง null ครั้งเดียว
     if (!location) {
-      if (prevKeyRef.current !== 'null') {
-        prevKeyRef.current = 'null'
-        onResult(null)
+      if (prevKeyRef.current !== 'EMPTY') {
+        prevKeyRef.current = 'EMPTY'
+        onResultRef.current(null)
       }
       return
     }
 
-    const symptoms: string[] = ['abdominal_pain', location]
-    let clinic: string[] = []
+    const symptoms: string[] = [
+      'abdominal_pain',
+      location,
+      'pain_scale',
+      `pain_scale_${painScale}`,
+    ]
     const noteParts: string[] = []
+    let clinic: string[] = []
 
     if (location === 'rlq') {
       clinic = ['surg']
       noteParts.push('ปวดท้องน้อยขวา (สงสัย Appendicitis)')
+      symptoms.push('suspected_appendicitis')
     } else if (location === 'epigastric') {
       clinic = ['muang']
       noteParts.push('จุกแน่นใต้ลิ้นปี่ (สงสัย Gastritis, Dyspepsia)')
+      symptoms.push('suspected_gastritis_dyspepsia')
     }
 
     noteParts.push(`ระดับความเจ็บปวด: ${painScale}/7`)
 
-    if (noteExtra.trim()) {
-      noteParts.push(`หมายเหตุ: ${noteExtra.trim()}`)
+    const extra = noteExtra.trim()
+    if (extra) {
+      noteParts.push(extra)
+      symptoms.push('abdominal_pain_note')
     }
 
-    const note = noteParts.join(' | ')
+    const note = noteParts.join(' | ') || undefined
 
-    const key = JSON.stringify({
+    const payload: Question8Result = {
+      question: 'StomachAche',
+      question_code: 8,
+      question_title: 'ปวดท้อง',
       clinic,
-      location,
-      painScale,
-      noteExtra,
+      note,
+      symptoms,
       type,
-    })
+      // ❌ ไม่ใส่ isReferCase เพราะไม่มีช้อย refer
+    }
 
+    const key = JSON.stringify(payload)
     if (prevKeyRef.current !== key) {
       prevKeyRef.current = key
-      onResult({
-        question: 'StomachAche',
-        question_code: 8,
-        question_title: 'ปวดท้อง',
-        clinic,
-        note,
-        symptoms,
-        isReferCase: true,
-        type,
-      })
+      onResultRef.current(payload)
     }
-  }, [location, painScale, noteExtra, type, onResult])
+  }, [location, painScale, noteExtra, type])
 
   return (
     <div className="space-y-5 text-sm text-gray-800">
