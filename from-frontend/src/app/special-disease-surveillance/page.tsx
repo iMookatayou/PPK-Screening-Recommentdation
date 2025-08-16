@@ -150,7 +150,7 @@ export default function SpecialDiseaseSurveillancePage() {
   return (
     <div className={styles.pageBackground}>
       <div className={styles.card}>
-        <h1 className={styles.title}>ระบบเฝ้าระวังโรคติดต่อพิเศษ - Special Communicable Disease Surveillance System</h1>
+        <h1 className={styles.title}>Special Communicable Disease Surveillance System - ระบบเฝ้าระวังโรคติดต่อพิเศษ</h1>
 
         <div className={styles.filterRow}>
           <div className={styles.searchWrapper}>

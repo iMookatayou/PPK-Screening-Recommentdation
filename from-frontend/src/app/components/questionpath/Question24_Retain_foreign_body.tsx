@@ -9,9 +9,8 @@ export interface Question24Result {
   question_code: number
   question_title: string
   clinic: string[]
-  note: string
+  note: string | null
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
   type: string
 }
@@ -30,16 +29,15 @@ export default function Question24_RetainedFB({ onResult, type }: Props) {
   useEffect(() => {
     const trimmed = extraNote.trim()
     const clinic = ['er']
-    const isReferCase = true
-    const symptoms = ['retained_foreign_body', ...(trimmed ? ['retain_note'] : [])]
-    const note = trimmed || 'Retained foreign body (วัตถุชิ้นใหญ่/ปักคา)'
+    const note = trimmed || null
+    const symptoms = ['retained_foreign_body', ...(note ? ['retain_note'] : [])]
 
     if (!shownOnceRef.current) {
       setShowPopup(true)
       shownOnceRef.current = true
     }
 
-    const key = JSON.stringify({ clinic, note, symptoms, isReferCase, type })
+    const key = JSON.stringify({ clinic, note, symptoms, type })
     if (prevKey.current !== key) {
       prevKey.current = key
       onResult({
@@ -49,7 +47,6 @@ export default function Question24_RetainedFB({ onResult, type }: Props) {
         clinic,
         note,
         symptoms,
-        isReferCase,
         routedBy: 'auto',
         type,
       })

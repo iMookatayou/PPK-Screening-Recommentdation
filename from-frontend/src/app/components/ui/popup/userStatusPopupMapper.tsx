@@ -74,7 +74,7 @@ const titleByCode: Record<ApiResponse['code'], string> = {
   SELF_ACTION_FORBIDDEN: 'ไม่ได้รับอนุญาต',
   UNAUTHENTICATED:       'ต้องเข้าสู่ระบบ',
   // --- Register flow
-  ALREADY_REGISTERED:    'เลขบัตรนี้ถูกใช้งานแล้ว',
+  ALREADY_REGISTERED:    'เลขบัตรนี้ถูกใช้งานแล้ว',   
   PENDING_EXISTING:      'มีคำขอรออนุมัติอยู่',
   REGISTERED_PENDING:    'สมัครสำเร็จ กำลังรออนุมัติ',
 }

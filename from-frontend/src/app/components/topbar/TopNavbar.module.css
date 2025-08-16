@@ -186,65 +186,33 @@
   line-height: 1;
 }
 
-/* ---------- iPad แนวตั้ง/แนวนอน (768px–1024px) ---------- */
-@media (min-width: 768px) and (max-width: 1024px) {
-  .titleGroup {
-    display: none; /* ซ่อนชื่อยาว */
-  }
+@media (min-width:768px) and (max-width:820px) {
+  .titleGroup { display: none; }   /* ซ่อนชื่อยาว */
+  .name { max-width: 100px; font-size: 0.85rem; }
+  .userBox { padding: 0.2rem 0.45rem; max-height: 34px; }
+  .avatar { width: 28px; height: 28px; }
+  .logoutBtn { padding: 0.3rem; }
+  .logoutIcon { width: 15px; height: 15px; }
+  .adminBadge { top:-5px; right:-5px; min-width:17px; height:17px; font-size:10px; }
+}
 
-  .name {
-    max-width: 90px; /* ลดความยาวชื่อ */
-  }
-
-  .userBox {
-    padding: 0.25rem 0.5rem;
-    max-height: 36px;
-  }
-
-  .avatar {
-    width: 30px;
-    height: 30px;
-  }
-
-  .logoutBtn {
-    padding: 0.35rem;
-  }
-
-  .logoutIcon {
-    width: 16px;
-    height: 16px;
-  }
-
-  .adminBtn {
-    padding: 0.35rem;
-  }
-
-  .adminIcon {
-    width: 18px;
-    height: 18px;
-  }
-
-  .adminBadge {
-    top: -5px;
-    right: -5px;
-    min-width: 18px;
-    height: 18px;
-    font-size: 11px;
-  }
+/* ---------- iPad Landscape (821px–1024px) ---------- */
+@media (min-width:821px) and (max-width:1024px) {
+  .titleGroup { display: flex; }   /* แสดงชื่อสั้นได้ */
+  .titleEn { font-size: 1rem; }
+  .titleTh { font-size: 0.85rem; }
+  .name { max-width: 120px; }
+  .userBox { padding: 0.25rem 0.6rem; }
+  .avatar { width: 32px; height: 32px; }
+  .logoutBtn { padding: 0.35rem; }
+  .logoutIcon { width: 16px; height: 16px; }
+  .adminBadge { min-width:18px; height:18px; font-size:11px; }
 }
 
 /* ---------- Mobile ≤600px ---------- */
-@media (max-width: 600px) {
-  .userBox,
-  .logoutBtn {
-    display: none;
-  }
-
-  .hamburgerWrapper {
-    display: block;
-  }
-
-  .titleGroup {
-    display: none;
-  }
+@media (max-width:600px) {
+  .titleGroup { display: none; }
+  .userBox, .logoutBtn { display: none; }
+  .hamburgerWrapper { display: block; }
+  .logo { height: 40px; }
 }

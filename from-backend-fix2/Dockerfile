@@ -1,34 +1,27 @@
-# Use the official PHP image with extensions for Laravel
-FROM php:8.2-fpm
+# PHP CLI + extensions + composer + mysql-client (รอ DB ได้)
+FROM php:8.3-cli-alpine
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    libpng-dev \
-    libonig-dev \
-    libxml2-dev \
-    zip \
-    unzip \
-    git \
-    curl \
-    libzip-dev \
-    && docker-php-ext-install pdo_mysql mbstring exif pcntl bcmath gd zip
+WORKDIR /app
 
-# Install Composer
-COPY --from=composer:2.7 /usr/bin/composer /usr/bin/composer
+RUN apk add --no-cache \
+      bash git curl icu-dev oniguruma-dev libzip-dev \
+      libpng-dev freetype-dev libjpeg-turbo-dev \
+      mysql-client \
+  && docker-php-ext-configure gd --with-freetype --with-jpeg \
+  && docker-php-ext-install pdo pdo_mysql mbstring zip exif gd intl
 
-# Set working directory
-WORKDIR /var/www
+# Composer
+RUN curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
 
-# Copy existing application directory contents
-COPY . /var/www
+# คัดลอกไฟล์ก่อน เพื่อ cache composer install ได้ (จะถูกแทนด้วย volume ตอนรัน)
+COPY composer.json composer.lock* ./
+RUN composer install --no-interaction || true
 
-# Copy existing application directory permissions
-RUN chown -R www-data:www-data /var/www \
-    && chmod -R 755 /var/www
+COPY . .
 
-# Install dependencies
-RUN composer install --no-interaction --prefer-dist --optimize-autoloader
+# entrypoint จะเช็ค vendor/.env ให้อัตโนมัติ
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
-# Expose port 9000 and start php-fpm server
-EXPOSE 9000
-CMD ["php-fpm"]
+EXPOSE 9001
+CMD ["/usr/local/bin/entrypoint.sh"]

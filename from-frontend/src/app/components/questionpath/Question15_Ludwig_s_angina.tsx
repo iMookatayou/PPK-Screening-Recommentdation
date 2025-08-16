@@ -9,7 +9,6 @@ export interface Question15Result {
   clinic: string[]
   note?: string
   symptoms: string[]
-  isReferCase: boolean
   type: string
 }
 
@@ -23,69 +22,58 @@ export default function Question15_LudwigAngina({ onResult, type }: Question15Pr
   const [selectedClinic, setSelectedClinic] = useState<'ent' | 'dental' | ''>('')
   const [extraNote, setExtraNote] = useState('')
 
-  // กันลูปจาก onResult reference เปลี่ยนทุก render
   const onResultRef = useRef(onResult)
   useEffect(() => { onResultRef.current = onResult }, [onResult])
 
-  // ป้องกันยิงซ้ำเมื่อค่าไม่เปลี่ยนจริง
   const prevKeyRef = useRef<string>('__INIT__')
 
   useEffect(() => {
     // ยังไม่เลือก airway → ส่ง null ครั้งเดียว
     if (!hasAirwayProblem) {
-      const k = 'EMPTY'
-      if (prevKeyRef.current !== k) {
-        prevKeyRef.current = k
+      if (prevKeyRef.current !== 'EMPTY') {
+        prevKeyRef.current = 'EMPTY'
         onResultRef.current(null)
       }
       return
     }
 
-    let clinic: string[] = []
-    let isReferCase = false
     const symptoms: string[] = ['ludwig_angina']
     const noteParts: string[] = []
+    let clinic: string[] = []
 
     if (hasAirwayProblem === 'yes') {
-      clinic = ['er']
-      isReferCase = true                    
+      clinic = ['er'] // มี Upper airway obstruction → ER
       noteParts.push('มีปัญหา Upper airway obstruction')
       symptoms.push('airway_problem')
     } else {
-      // ไม่มีปัญหา → ต้องเลือก clinic
+      // ไม่มีปัญหา → ต้องเลือกห้องตรวจ
       if (!selectedClinic) {
-        const k = 'WAIT'
-        if (prevKeyRef.current !== k) {
-          prevKeyRef.current = k
+        if (prevKeyRef.current !== 'WAIT_CLINIC') {
+          prevKeyRef.current = 'WAIT_CLINIC'
           onResultRef.current(null)
         }
         return
       }
-      clinic = [selectedClinic]
-      noteParts.push(
-        `ไม่มีปัญหา Upper airway obstruction → ${
-          selectedClinic === 'ent' ? 'OPD ENT' : 'OPD ทันตกรรม'
-        }`
-      )
+      clinic = [selectedClinic] // 'ent' หรือ 'dental'
+      noteParts.push('ไม่มีปัญหา Upper airway obstruction')
       symptoms.push('no_airway_problem')
     }
 
-    // รวมหมายเหตุผู้ใช้ (trim และใส่แท็ก note)
     const extra = extraNote.trim()
     if (extra) {
       noteParts.push(extra)
       if (!symptoms.includes('ludwig_note')) symptoms.push('ludwig_note')
     }
 
-    const finalNote = noteParts.join(' | ') || undefined 
+    const note = noteParts.join(' | ') || undefined
+
     const payload: Question15Result = {
       question: 'Ludwig’s angina',
       question_code: 15,
       question_title: 'Ludwig’s angina (เจ็บกราม อ้าปากไม่ขึ้น คางบวม)',
       clinic,
-      note: finalNote,         
+      note,
       symptoms,
-      isReferCase,             
       type,
     }
 
@@ -98,10 +86,9 @@ export default function Question15_LudwigAngina({ onResult, type }: Question15Pr
 
   return (
     <div className="space-y-4 text-sm">
-      {/* Step 1: เลือกว่ามีปัญหา airway หรือไม่ */}
       <div>
         <label htmlFor="airway-problem" className="block font-medium">
-          ปัญหา Upper airway obstruction:
+          ปัญหา Upper airway obstruction
         </label>
         <select
           id="airway-problem"
@@ -109,7 +96,7 @@ export default function Question15_LudwigAngina({ onResult, type }: Question15Pr
           onChange={(e) => {
             const v = e.target.value as 'yes' | 'no' | ''
             setHasAirwayProblem(v)
-            if (v === 'yes') setSelectedClinic('')
+            if (v === 'yes') setSelectedClinic('') // เคลียร์ตัวเลือกห้องตรวจเมื่อเข้า ER
           }}
           className="w-full border px-3 py-2 rounded"
         >
@@ -119,7 +106,6 @@ export default function Question15_LudwigAngina({ onResult, type }: Question15Pr
         </select>
       </div>
 
-      {/* Step 2: ถ้าไม่มีปัญหา ให้เลือกห้องตรวจ */}
       {hasAirwayProblem === 'no' && (
         <div>
           <label htmlFor="clinic-select" className="block font-medium">
@@ -138,7 +124,6 @@ export default function Question15_LudwigAngina({ onResult, type }: Question15Pr
         </div>
       )}
 
-      {/* หมายเหตุ */}
       <div>
         <label htmlFor="extraNote" className="block font-medium">
           หมายเหตุเพิ่มเติม

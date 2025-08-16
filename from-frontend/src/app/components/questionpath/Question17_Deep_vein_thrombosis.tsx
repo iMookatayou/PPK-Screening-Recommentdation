@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 export interface Question17Result {
   question: string
@@ -19,79 +19,100 @@ interface Props {
   type: string
 }
 
+type DvtSymKey =
+  | 'uni_swelling'   // ขาข้างเดียวบวม
+  | 'calf_tender'    // เจ็บบริเวณน่อง
+  | 'claudication'   // ปวดขาเวลาเดิน
+  | 'red_warm'       // ขาแดง ร้อน
+  | 'ankle_swelling' // ข้อเท้าบวม
+
+const OPTION_LIST: { key: DvtSymKey; label: string }[] = [
+  { key: 'uni_swelling',   label: 'ขาข้างเดียวบวม' },
+  { key: 'calf_tender',    label: 'เจ็บบริเวณน่อง' },
+  { key: 'claudication',   label: 'ปวดขาเวลาเดิน' },
+  { key: 'red_warm',       label: 'ขาแดง ร้อน' },
+  { key: 'ankle_swelling', label: 'ข้อเท้าบวม' },
+]
+
 export default function Question17_DVT({ onResult, type }: Props) {
-  const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([])
+  const [selected, setSelected] = useState<DvtSymKey[]>([])
   const [customNote, setCustomNote] = useState('')
 
-  const prevResultRef = useRef<string>('')
+  // ทำ onResult ให้เสถียร
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
 
-  const symptomOptions = [
-    'ขาข้างเดียวบวม',
-    'เจ็บบริเวณน่อง',
-    'ปวดขาเวลาเดิน',
-    'ขาแดง ร้อน',
-    'ข้อเท้าบวม',
-  ]
+  // กันยิงซ้ำ
+  const prevKeyRef = useRef<string>('__INIT__')
 
-  const toggleSymptom = (symptom: string) => {
-    setSelectedSymptoms((prev) =>
-      prev.includes(symptom)
-        ? prev.filter((s) => s !== symptom)
-        : [...prev, symptom]
+  const toggle = (k: DvtSymKey) =>
+    setSelected(prev =>
+      prev.includes(k) ? prev.filter(x => x !== k) : [...prev, k]
     )
-  }
 
   useEffect(() => {
-    const trimmedNote = customNote.trim()
+    const extra = customNote.trim()
 
-    const symptoms = ['dvt', ...selectedSymptoms]
-    if (trimmedNote) symptoms.push('custom_note')
-
-    const clinic = ['muang']
-    const isReferCase = symptoms.length > 1 // เพราะมี 'dvt' อยู่แล้ว
-
-    const readableNote = [...selectedSymptoms]
-    if (trimmedNote) readableNote.push(trimmedNote)
-    const finalNote = readableNote.length > 0 ? readableNote.join(', ') : 'สงสัย DVT อาการไม่ระบุ'
-
-    const resultKey = JSON.stringify({ clinic, finalNote, symptoms, isReferCase })
-
-    if (prevResultRef.current !== resultKey) {
-      prevResultRef.current = resultKey
-
-      if (symptoms.length <= 1 && !trimmedNote) {
-        onResult(null)
-        return
+    // ยังไม่เลือกอะไรและไม่มี note → ส่ง null แค่ครั้งเดียว
+    if (selected.length === 0 && !extra) {
+      if (prevKeyRef.current !== 'EMPTY') {
+        prevKeyRef.current = 'EMPTY'
+        onResultRef.current(null)
       }
-
-      onResult({
-        question: 'DVTSuspect',
-        question_code: 17,
-        question_title: 'ภาวะสงสัยหลอดเลือดดำลึกอุดตัน (DVT)',
-        clinic,
-        note: finalNote,
-        symptoms,
-        isReferCase,
-        routedBy: 'auto',
-        type,
-      })
+      return
     }
-  }, [selectedSymptoms, customNote, onResult, type])
+
+    // symptoms tags
+    const symptoms: string[] = ['dvt', ...selected.map(k => `dvt_${k}`)]
+    if (extra) symptoms.push('dvt_note')
+
+    // note: รวม label ที่เลือก + extra
+    const labelsChosen = OPTION_LIST
+      .filter(opt => selected.includes(opt.key))
+      .map(opt => opt.label)
+
+    const noteParts = [...labelsChosen]
+    if (extra) noteParts.push(extra)
+    const finalNote =
+      noteParts.length > 0 ? noteParts.join(' | ') : 'สงสัย DVT (ไม่ระบุอาการ)'
+
+    // routing: ตามเกณฑ์งานทั่วไป → รพ.เมือง
+    const clinic = ['muang']
+
+    const payload: Question17Result = {
+      question: 'DVTSuspect',
+      question_code: 17,
+      question_title: 'ภาวะสงสัยหลอดเลือดดำลึกอุดตัน (DVT)',
+      clinic,
+      note: finalNote,
+      symptoms,
+      isReferCase: false,    
+      routedBy: 'auto',
+      type,
+    }
+
+    const key = JSON.stringify(payload)
+    if (prevKeyRef.current !== key) {
+      prevKeyRef.current = key
+      onResultRef.current(payload)
+    }
+  }, [selected, customNote, type])
 
   return (
     <div className="space-y-4 text-sm">
       <div>
         <p className="mb-2 font-medium">โปรดเลือกอาการที่เกี่ยวข้องกับภาวะ DVT:</p>
+
         <div className="space-y-2 mb-3">
-          {symptomOptions.map((symptom) => (
-            <label key={symptom} className="flex items-center space-x-2">
+          {OPTION_LIST.map(opt => (
+            <label key={opt.key} className="flex items-center space-x-2">
               <input
                 type="checkbox"
-                checked={selectedSymptoms.includes(symptom)}
-                onChange={() => toggleSymptom(symptom)}
+                checked={selected.includes(opt.key)}
+                onChange={() => toggle(opt.key)}
                 className="w-4 h-4 border-gray-300 rounded"
               />
-              <span>{symptom}</span>
+              <span>{opt.label}</span>
             </label>
           ))}
         </div>

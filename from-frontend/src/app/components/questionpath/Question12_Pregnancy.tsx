@@ -236,7 +236,7 @@ export default function Question12_Pregnancy({
 
       <div>
         <label htmlFor="extraNote" className="block font-medium">
-          หมายเหตุเพิ่มเติม (ถ้ามี):
+          หมายเหตุเพิ่มเติม (ถ้ามี)
         </label>
         <textarea
           id="extraNote"

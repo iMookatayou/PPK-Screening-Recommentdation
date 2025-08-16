@@ -6,32 +6,44 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* === Fonts === */
+/* ===================================================================
+   Fonts (แก้ format ให้ตรงชนิดไฟล์ + เปิด font-display: swap)
+   =================================================================== */
 @font-face {
   font-family: 'Sarabun';
-  src: url('/fonts/sarabun/Sarabun-Regular.woff2') format('truetype');
-  font-weight: normal;
+  src: url('/fonts/sarabun/Sarabun-Regular.woff2') format('woff2');
+  font-weight: 400;
   font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Sarabun';
-  src: url('/fonts/sarabun/Sarabun-Bold.woff2') format('truetype');
-  font-weight: bold;
+  src: url('/fonts/sarabun/Sarabun-Bold.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Sarabun';
-  src: url('/fonts/sarabun/Sarabun-SemiBold.woff2') format('truetype');
+  src: url('/fonts/sarabun/Sarabun-SemiBold.woff2') format('woff2');
   font-weight: 600;
+  font-style: normal;
+  font-display: swap;
 }
+/* Poppins / Inter: ใช้ .ttf ตามเดิม + swap */
 @font-face {
   font-family: 'Poppins';
   src: url('/fonts/poppins/Poppins-Regular.ttf') format('truetype');
-  font-weight: normal;
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Inter';
   src: url('/fonts/inter/Inter_18pt-Regular.ttf') format('truetype');
-  font-weight: normal;
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
 }
 
 body {
@@ -75,7 +87,9 @@ body {
   --radius-xl: calc(var(--radius) + 4px);
 }
 
-/* === ROOT COLOR === */
+/* ===================================================================
+   ROOT COLOR / Z-Index Scale
+   =================================================================== */
 :root {
   --radius: 0.625rem;
   --background: oklch(1 0 0);
@@ -102,15 +116,17 @@ body {
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
 
-  /* === Z-INDEX SCALE กลาง ทั้งระบบ === */
+  /* Z-Index scale */
   --z-base: 1;
   --z-sticky: 100;     /* topbar / sidebar */
-  --z-dropdown: 900;   /* เมนูย่อย */
+  --z-dropdown: 900;   /* dropdown/popover */
   --z-overlay: 10000;  /* modal/backdrop */
   --z-toast: 11000;    /* toast/notification */
 }
 
-/* === DARK THEME === */
+/* ===================================================================
+   DARK THEME (ของเดิม)
+   =================================================================== */
 .dark {
   --background: oklch(0.13 0.028 261.692);
   --foreground: oklch(0.985 0.002 247.839);
@@ -137,25 +153,57 @@ body {
   --chart-5: oklch(0.645 0.246 16.439);
 }
 
-/* === BASE === */
+/* ===================================================================
+   Tailwind base layer apply
+   =================================================================== */
 @layer base {
   * { @apply border-border outline-ring/50; }
   body { @apply bg-background text-foreground; }
 }
 
-/* === PRINT === */
-@media print {
-  .navbar, .sidebar { display: none; }
-  .btn, .footer, .header { display: none; }
-  body {
-    font-family: 'Sarabun', 'Poppins', sans-serif;
-    font-size: 16px; color: #1a1a1a; background-color: #ffffff;
-  }
-  table { width: 100%; border-collapse: collapse; }
-  table th, table td { padding: 8px; text-align: left; border: 1px solid #ddd; }
+/* ===================================================================
+   Viewport / Safe-area helpers (เพิ่มความเนียนบน iOS/iPadOS)
+   =================================================================== */
+:root { color-scheme: light dark; }
+.dark { color-scheme: dark; }
+
+html, body { min-height: 100%; }
+@supports (height: 100dvh) {
+  body { min-height: 100dvh; } /* ป้องกัน 100vh กระตุกตอนคีย์บอร์ดโผล่ */
 }
 
-/* === Auth Loading === */
+/* Utilities เผื่อใช้งานทั่วไป */
+.safe-area-pb { padding-bottom: max(16px, env(safe-area-inset-bottom)); }
+.safe-area-pt { padding-top: max(16px, env(safe-area-inset-top)); }
+.vh-100 { min-height: 100dvh; }
+
+/* ===================================================================
+   PRINT (รวมเป็นก้อนเดียว)
+   =================================================================== */
+@media print {
+  /* ซ่อน UI ที่ไม่จำเป็นตอนพิมพ์ */
+  .navbar, .sidebar, .btn, .footer, .header,
+  .no-print, .no-print * { display: none !important; }
+
+  /* ฐานการพิมพ์ */
+  body {
+    font-family: 'Sarabun', 'Poppins', 'Inter', sans-serif;
+    font-size: 16px;
+    color: #1a1a1a;
+    background: #ffffff;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+  table th, table td {
+    padding: 8px;
+    text-align: left;
+    border: 1px solid #ddd;
+  }
+}
+
+/* ===================================================================
+   Auth Loading
+   =================================================================== */
 .auth-loading-screen {
   display: flex; justify-content: center; align-items: center;
   height: 100vh; background: white;
@@ -168,35 +216,29 @@ body {
 .auth-loading-text { margin-top: 16px; font-size: 1rem; color: #4b5563; font-weight: 500; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ======================================================================
-   ========== LAYOUT & OVERLAY SYSTEM (ใช้ได้กับทุก popup) ==========
-   ====================================================================== */
-
-/* Topbar / Sidebar ควรอยู่ที่ z-index กลาง */
+/* ===================================================================
+   LAYOUT & OVERLAY SYSTEM (ใช้ร่วมกับทุก popup)
+   =================================================================== */
 .topbar { position: sticky; top: 0; z-index: var(--z-sticky); }
 .sidebar { position: sticky; top: 64px; z-index: var(--z-sticky); }
 
-/* ป้องกันการสร้าง stacking context โดยไม่ตั้งใจใน wrapper หลัก
-   (หลีกเลี่ยง transform/filter/opacity<1 ถ้าไม่จำเป็น) */
+/* เลี่ยงการสร้าง stacking context โดยไม่ตั้งใจบน wrapper หลัก */
 .app-shell, .content { will-change: auto; }
 
-/* ===== Overlay / Modal Portal roots =====
-   ใส้ใน layout.tsx: <div id="overlay-root" /> <div id="toast-root" /> */
+/* Portal roots (วางไว้ใน layout.tsx: #overlay-root / #toast-root) */
 #overlay-root, #toast-root {
   position: relative;
   z-index: var(--z-overlay);
 }
 
-/* ===== Utilities ใช้กับทุก modal/backdrop ===== */
-.modal-open { overflow: hidden; } /* เพิ่ม/ลบบน <body> ตอนเปิด/ปิดโมดัล */
-
+/* Modal/Backdrop utilities */
+.modal-open { overflow: hidden; }
 .modal-backdrop {
   position: fixed; inset: 0;
   background: rgba(0,0,0,0.35);
   display: grid; place-items: center;
   z-index: var(--z-overlay);
 }
-
 .modal-card {
   width: min(560px, 92vw);
   background: #fff;
@@ -206,26 +248,12 @@ body {
   padding: 20px;
 }
 
-/* ปุ่มสไตล์ราชการเบา ๆ ที่ใช้บ่อย */
-.btn-ghost {
-  padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff;
-}
-.btn-danger {
-  padding: 8px 14px; border-radius: 8px; border: 0; background: #dc2626; color: #fff;
-}
-.btn-success {
-  padding: 8px 14px; border-radius: 8px; border: 0; background: #16a34a; color: #fff;
-}
+/* ปุ่มใช้งานบ่อย */
+.btn-ghost   { padding: 8px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; }
+.btn-danger  { padding: 8px 14px; border-radius: 8px; border: 0; background: #dc2626; color: #fff; }
+.btn-success { padding: 8px 14px; border-radius: 8px; border: 0; background: #16a34a; color: #fff; }
 
-/* ===== Dropdown / Popover พิเศษ (เช่น react-select) ให้ลอยเหนือ layout ===== */
-.portal-layer {
-  position: absolute;
-  z-index: var(--z-dropdown);
-}
-
-/* ซ่อนทุกอย่างที่ติดคลาส global: no-print เฉพาะตอนพิมพ์ */
-@media print {
-  .no-print { display: none !important; }
-  /* กันเผื่อบางบราวเซอร์เรนเดอร์ปุ่ม/ไอคอนแยก */
-  .no-print * { display: none !important; }
-}
+/* ชั้นวาง dropdown/popover ที่เป็น portal */
+.portal-layer { position: absolute; z-index: var(--z-dropdown); }
+/* (ตัวเลือก) ถ้าต้องการให้ลอยเต็มหน้าจอ */
+.portal-layer-fixed { position: fixed; inset: 0 auto auto 0; z-index: var(--z-dropdown); }

@@ -7,27 +7,19 @@
   font-family: 'Sarabun', sans-serif;
   box-shadow: 1px 0 3px rgba(0, 0, 0, 0.05);
   height: 100vh;
+  height: 100dvh;               /* iOS/Android modern viewport */
   overflow-y: auto;
   overflow-x: hidden;
-  transition: all 0.3s ease-in-out;
+  transition: transform .3s ease-in-out, width .3s ease-in-out, padding .2s ease-in-out;
   position: relative;
   z-index: 100;
 }
 
 /* Scrollbar */
-.sidebar::-webkit-scrollbar {
-  width: 6px;
-}
-.sidebar::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-.sidebar::-webkit-scrollbar-thumb {
-  background-color: rgba(0, 0, 0, 0.15);
-  border-radius: 3px;
-}
-.sidebar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(0, 0, 0, 0.3);
-}
+.sidebar::-webkit-scrollbar { width: 6px; }
+.sidebar::-webkit-scrollbar-track { background: #f1f1f1; }
+.sidebar::-webkit-scrollbar-thumb { background-color: rgba(0,0,0,.15); border-radius: 3px; }
+.sidebar::-webkit-scrollbar-thumb:hover { background-color: rgba(0,0,0,.3); }
 
 /* Search */
 .searchWrapper {
@@ -39,7 +31,6 @@
   padding: 0.4rem 0.6rem;
   margin-bottom: 1rem;
 }
-
 .searchInput {
   border: none;
   background: transparent;
@@ -50,10 +41,7 @@
 }
 
 /* Sections */
-.section {
-  margin-bottom: 0.8rem;
-}
-
+.section { margin-bottom: 0.8rem; }
 .sectionToggle {
   background: none;
   border: none;
@@ -64,11 +52,9 @@
   cursor: pointer;
   width: 100%;
   text-align: left;
-  transition: color 0.2s;
+  transition: color .2s;
 }
-.sectionToggle:hover {
-  color: #1e40af;
-}
+.sectionToggle:hover { color: #1e40af; }
 
 /* Links */
 .linkList {
@@ -77,7 +63,6 @@
   margin-top: 0.3rem;
   border-left: 1px solid #e0e0e0;
 }
-
 .link {
   display: block;
   padding: 0.35rem 0.6rem;
@@ -85,36 +70,57 @@
   font-size: 0.88rem;
   color: #555;
   text-decoration: none;
-  transition: background 0.2s, color 0.2s;
+  transition: background .2s, color .2s;
 }
-.link:hover {
-  background: #f2f6ff;
-  color: #1e40af;
-}
-
-.active {
-  background: #e8f0ff;
-  color: #1e40af;
-  font-weight: 600;
-}
+.link:hover { background: #f2f6ff; color: #1e40af; }
+.active { background: #e8f0ff; color: #1e40af; font-weight: 600; }
 
 /* ---------- iPad (แนวตั้ง/แนวนอน ≤1024px) ---------- */
-@media (max-width: 1024px) {
-  .sidebar {
-    flex: 0 0 220px;
-    padding: 0.75rem;
+@media (max-width:1024px){
+  .sidebar { flex: 0 0 220px; padding: .75rem; }
+  .searchInput { font-size: .85rem; }
+  .sectionToggle { font-size: .9rem; }
+  .link { font-size: .85rem; padding: .3rem .5rem; }
+}
+
+/* ---------- Mobile / Off-Canvas Sidebar ≤768px ---------- */
+/* ใช้คลาสเสริม .is-open กับ .sidebar-backdrop หากต้องการเปิด/ปิดแบบสไลด์ */
+@media (max-width:768px){
+  .sidebar{
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 82vw;
+    max-width: 320px;
+    height: 100dvh;
+    transform: translateX(-100%);     /* ซ่อนนอกจอด้านซ้าย */
+    box-shadow: 8px 0 24px rgba(0,0,0,.12);
+    padding: .9rem;
+  }
+  .sidebar.is-open{
+    transform: translateX(0);         /* แสดงเมื่อมีคลาสนี้ */
   }
 
-  .searchInput {
-    font-size: 0.85rem;
-  }
+  /* ปรับขนาดองค์ประกอบให้แตะง่ายขึ้น */
+  .sectionToggle{ padding: .4rem 0; }
+  .link{ padding: .45rem .6rem; font-size: .92rem; }
+  .searchWrapper{ padding: .5rem .65rem; }
+  .searchInput{ font-size: .95rem; }
 
-  .sectionToggle {
-    font-size: 0.9rem;
+  /* แบ็คดรอปตัวเลือก (เพิ่ม element <div class="sidebar-backdrop"> ถ้าต้องการ) */
+  .sidebar-backdrop{
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .35);
+    backdrop-filter: blur(1px);
+    z-index: 90;
+    display: none;
   }
+  .sidebar-backdrop.is-open{ display: block; }
+}
 
-  .link {
-    font-size: 0.85rem;
-    padding: 0.3rem 0.5rem;
-  }
+/* ---------- Very Small Phones ≤360px (optional) ---------- */
+@media (max-width:360px){
+  .sidebar{ width: 88vw; }
+  .link{ font-size: .9rem; }
 }

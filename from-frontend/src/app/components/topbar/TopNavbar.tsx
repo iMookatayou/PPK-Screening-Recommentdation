@@ -30,30 +30,52 @@ export default function TopNavBar() {
   }
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') return
+    if (!user || user.role !== 'admin') return;
 
-    // ดึงครั้งแรก
-    fetchPending()
+    let intervalId: number | null = null;
+    let inFlight = false;
+    const fetchSafe = async () => {
+      if (inFlight) return;
+      inFlight = true;
+      try { await fetchPending(); } finally { inFlight = false; }
+    };
 
-    // กลับมาโฟกัสหน้า → รีเฟรชเลข
-    const onVisible = () => {
-      if (document.visibilityState === 'visible') fetchPending()
-    }
-    document.addEventListener('visibilitychange', onVisible)
+    const start = () => {
+      // เรียกครั้งแรกทันที
+      fetchSafe();
+      // เริ่ม interval เฉพาะตอนมองเห็นแท็บ
+      intervalId = window.setInterval(fetchSafe, 60_000);
+    };
 
-    // ตั้ง interval ทุก 60 วิ (ปรับได้)
-    timerRef.current = setInterval(fetchPending, 60_000)
+    const stop = () => {
+      if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+      }
+    };
 
-    // ฟัง event ภายในแอป เวลาเพิ่งอนุมัติ/ปฏิเสธ → ให้รีเฟรชเลขทันที
-    const refreshHandler = () => fetchPending()
-    window.addEventListener('admin-pending-refresh', refreshHandler as EventListener)
+    const onVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    // initial
+    if (document.visibilityState === 'visible') start();
+
+    document.addEventListener('visibilitychange', onVisibility);
+    const refreshHandler = () => fetchSafe();
+    window.addEventListener('admin-pending-refresh', refreshHandler as EventListener);
 
     return () => {
-      document.removeEventListener('visibilitychange', onVisible)
-      window.removeEventListener('admin-pending-refresh', refreshHandler as EventListener)
-      if (timerRef.current) clearInterval(timerRef.current)
-    }
-  }, [user])
+      stop();
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('admin-pending-refresh', refreshHandler as EventListener);
+    };
+  }, [user]);
+
   // ------ /NEW ------
 
   const displayName = useMemo(() => {

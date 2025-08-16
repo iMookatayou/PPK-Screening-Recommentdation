@@ -12,8 +12,6 @@ export interface Question14Result {
   note?: string
   symptoms: string[]
   routedBy: 'auto'
-  // isReferCase: ไม่มีช้อย refer → ไม่ต้องส่งฟิลด์นี้
-  // isReferCase?: boolean
 }
 
 interface Props {
@@ -22,6 +20,7 @@ interface Props {
 
 export default function Question14_RespInfect({ onResult }: Props) {
   const [suspectDisease, setSuspectDisease] = useState('')
+  const [ageYears, setAgeYears] = useState<number | ''>('')      // ✅ อายุ
   const [hasCalledOPD, setHasCalledOPD] = useState(false)
   const [customClinic, setCustomClinic] = useState('')
   const [noteExtra, setNoteExtra] = useState('')
@@ -52,10 +51,24 @@ export default function Question14_RespInfect({ onResult }: Props) {
     }
 
     if (suspectDisease === 'infectious_disease') {
-      clinic = ['opd203']
-      // สะกดแท็กให้สอดคล้อง
       symptoms.push('covid', 'chickenpox', 'herpes_zoster', 'measles', 'rubella', 'hfmd')
-      noteParts.push('สงสัย COVID-19 / Chickenpox / Herpes Zoster / Measles / Rubella / HFMD (vital sign stable)')
+      const age = typeof ageYears === 'number' ? ageYears : NaN
+      if (!Number.isNaN(age)) noteParts.push(`อายุ ${age} ปี`)
+
+      if (!Number.isNaN(age) && age < 15) {
+        if (!hasCalledOPD) {
+          const waitingKey = JSON.stringify({ WAIT_PED_CALL: true, age, hasCalledOPD })
+          if (prevKeyRef.current !== waitingKey) {
+            prevKeyRef.current = waitingKey
+            onResultRef.current(null)
+          }
+          return
+        }
+        clinic = ['ped']
+      } else {
+        clinic = ['muang']
+        noteParts.push('ส่ง รพ.เมือง')
+      }
     }
 
     if (suspectDisease === 'important_symptom') {
@@ -68,7 +81,7 @@ export default function Question14_RespInfect({ onResult }: Props) {
         return
       }
       clinic = [customClinic]
-      noteParts.push('อาการสำคัญ (vital sign stable)')
+      noteParts.push('อาการสำคัญ (vital sign stable) — ประสานห้องตรวจแล้ว')
     }
 
     const extra = noteExtra.trim()
@@ -94,8 +107,7 @@ export default function Question14_RespInfect({ onResult }: Props) {
       prevKeyRef.current = key
       onResultRef.current(payload)
     }
-  }, [suspectDisease, hasCalledOPD, customClinic, noteExtra])
-  // ถ้า component นี้มี prop `type` ในอนาคต ให้ใส่ไว้ใน deps ด้วย เช่น [..., type]
+  }, [suspectDisease, ageYears, hasCalledOPD, customClinic, noteExtra])
 
   return (
     <div className="space-y-4 text-sm">
@@ -105,7 +117,6 @@ export default function Question14_RespInfect({ onResult }: Props) {
         </label>
         <select
           id="suspectDisease"
-          title="เลือกประเภทอาการติดเชื้อทางเดินหายใจ"
           value={suspectDisease}
           onChange={(e) => {
             const value = e.target.value
@@ -125,6 +136,33 @@ export default function Question14_RespInfect({ onResult }: Props) {
         </select>
       </div>
 
+      {/* อายุ */}
+      {suspectDisease === 'infectious_disease' && (
+        <div>
+          <label htmlFor="ageYears" className="block font-medium">อายุ (ปี)</label>
+          <input
+            id="ageYears"
+            type="number"
+            min={0}
+            value={ageYears === '' ? '' : ageYears}
+            onChange={(e) => setAgeYears(e.target.value === '' ? '' : Number(e.target.value))}
+            className="w-full border px-3 py-2 rounded mt-1"
+            placeholder="ถ้า < 15 ปี จะส่ง OPD กุมารเวชกรรม (ต้องโทรก่อน)"
+          />
+          {typeof ageYears === 'number' && ageYears < 15 && (
+            <label className="inline-flex items-center gap-2 mt-2">
+              <input
+                type="checkbox"
+                checked={hasCalledOPD}
+                onChange={(e) => setHasCalledOPD(e.target.checked)}
+              />
+              ได้โทรประสาน OPD กุมารเวชกรรมแล้ว
+            </label>
+          )}
+        </div>
+      )}
+
+      {/* อาการสำคัญ */}
       {suspectDisease === 'important_symptom' && (
         <>
           <div>
@@ -141,11 +179,10 @@ export default function Question14_RespInfect({ onResult }: Props) {
           {hasCalledOPD && (
             <div>
               <label htmlFor="customClinic" className="block font-medium">
-                ห้องตรวจที่ประสานแล้ว:
+                ห้องตรวจที่ประสานแล้ว
               </label>
               <select
                 id="customClinic"
-                title="เลือกห้องตรวจที่โทรประสานแล้ว"
                 value={customClinic}
                 onChange={(e) => setCustomClinic(e.target.value)}
                 className="w-full border px-3 py-2 rounded mt-1"
@@ -162,12 +199,11 @@ export default function Question14_RespInfect({ onResult }: Props) {
 
       <div>
         <label htmlFor="noteExtra" className="block font-medium">
-          หมายเหตุเพิ่มเติม (ถ้ามี):
+          หมายเหตุเพิ่มเติม (ถ้ามี)
         </label>
         <input
           id="noteExtra"
           type="text"
-          title="ระบุหมายเหตุเพิ่มเติม"
           value={noteExtra}
           onChange={(e) => setNoteExtra(e.target.value)}
           placeholder="เช่น มีโรคประจำตัว ประวัติสัมผัส"

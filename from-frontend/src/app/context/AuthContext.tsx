@@ -1,142 +1,3 @@
-// 'use client'
-
-// import {
-//   createContext,
-//   useContext,
-//   useEffect,
-//   useState,
-//   useCallback,
-//   useRef,
-// } from 'react'
-// import { useRouter, usePathname } from 'next/navigation'
-// import { authAxios } from '@/lib/axios'
-// import AnimatedLogo from '@/app/animatorlogo/AnimatedLogo'
-// import { motion } from 'framer-motion'
-
-// interface AuthContextType {
-//   user: any
-//   loading: boolean
-//   isAuthenticated: boolean
-//   token: string | null
-//   logout: () => void
-//   refreshUser: () => Promise<void>
-// }
-
-// const AuthContext = createContext<AuthContextType>({
-//   user: null,
-//   loading: true,
-//   isAuthenticated: false,
-//   token: null, 
-//   logout: () => {},
-//   refreshUser: async () => {},
-// })
-
-// const publicPaths = ['/login', '/register']
-
-// export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-//   const [user, setUser] = useState<any>(null)
-//   const [loading, setLoading] = useState(true)
-//   const [token, setToken] = useState<string | null>(null) 
-//   const initializedRef = useRef(false)
-
-//   const router = useRouter()
-//   const pathname = usePathname()
-
-//   const logout = useCallback(() => {
-//     console.warn('[AUTH] Logging out...')
-//     localStorage.removeItem('token')
-//     localStorage.removeItem('user')
-//     setUser(null)
-//     setToken(null) 
-//     setLoading(false)
-
-//     if (!publicPaths.includes(pathname)) {
-//       router.replace('/login')
-//     }
-//   }, [pathname, router])
-
-//   const refreshUser = useCallback(async () => {
-//     setLoading(true)
-
-//     const tokenFromStorage = localStorage.getItem('token')
-//     if (!tokenFromStorage) {
-//       logout()
-//       setLoading(false)
-//       return
-//     }
-
-//     try {
-//       const res = await authAxios().get('/api/me')
-//       setUser(res.data)
-//       setToken(tokenFromStorage) 
-//     } catch (err) {
-//       console.error('[AUTH] /me failed:', err)
-//       logout()
-//     } finally {
-//       setLoading(false)
-//     }
-//   }, [logout])
-
-//   useEffect(() => {
-//     if (initializedRef.current) return
-//     initializedRef.current = true
-
-//     const tokenFromStorage = localStorage.getItem('token')
-//     console.log('[AUTH] Token on load:', tokenFromStorage)
-
-//     if (!tokenFromStorage) {
-//       if (!publicPaths.includes(pathname)) {
-//         setLoading(false)
-//         logout()
-//         return
-//       }
-//       setLoading(false)
-//       return
-//     }
-
-//     refreshUser()
-//   }, [pathname, refreshUser, logout])
-
-//   return (
-//     <AuthContext.Provider
-//       value={{
-//         user,
-//         loading,
-//         isAuthenticated: !!user,
-//         token, 
-//         logout,
-//         refreshUser,
-//       }}
-//     >
-//       {loading && pathname === '/login' ? (
-//         <motion.div
-//           initial={{ opacity: 0, y: -10 }}
-//           animate={{ opacity: 1, y: 0 }}
-//           transition={{ duration: 0.5 }}
-//           style={{
-//             display: 'flex',
-//             flexDirection: 'column',
-//             alignItems: 'center',
-//             justifyContent: 'center',
-//             minHeight: '100vh',
-//             textAlign: 'center',
-//             backgroundColor: '#fff',
-//           }}
-//         >
-//           <AnimatedLogo />
-//           <p style={{ fontSize: '1.2rem', marginTop: '1rem', color: '#333' }}>
-//             กำลังตรวจสอบสิทธิ์...
-//           </p>
-//         </motion.div>
-//       ) : (
-//         children
-//       )}
-//     </AuthContext.Provider>
-//   )
-// }
-
-// export const useAuth = () => useContext(AuthContext)
-
 'use client'
 
 import React, {
@@ -147,6 +8,7 @@ import React, {
   useCallback,
   useRef,
 } from 'react'
+import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import { authAxios, setAuthHeader } from '@/lib/axios'
 import AnimatedLogo from '@/app/animatorlogo/AnimatedLogo'
@@ -182,6 +44,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [token, setToken] = useState<string | null>(null)
+
+  // กัน window/document ตอน SSR
   const [mounted, setMounted] = useState(false)
 
   const router = useRouter()
@@ -211,7 +75,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     setUser(null)
     setToken(null)
-    setAuthHeader(undefined)          
+    setAuthHeader(undefined)
     setLoading(false)
     clearLogoutTimer()
 
@@ -246,7 +110,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       setToken(rawToken)
       setUser(userObj)
-      setAuthHeader(rawToken)         
+      setAuthHeader(rawToken)
       scheduleAutoLogout(expiresAt)
 
       try {
@@ -264,7 +128,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setLoading(true)
     const tokenFromStorage = localStorage.getItem(STORAGE_TOKEN_KEY)
     if (!tokenFromStorage) {
-      setAuthHeader(undefined)  
+      setAuthHeader(undefined)
       setLoading(false)
       return
     }
@@ -290,12 +154,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const exp = localStorage.getItem(STORAGE_EXP_KEY)
 
     if (!tokenFromStorage) {
-      setAuthHeader(undefined)       
+      setAuthHeader(undefined)
       setLoading(false)
       return
     }
 
-    setAuthHeader(tokenFromStorage) 
+    setAuthHeader(tokenFromStorage)
     refreshUser()
     scheduleAutoLogout(exp)
   }, [refreshUser, scheduleAutoLogout])
@@ -319,7 +183,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (payload.type === 'LOGOUT') {
           setUser(null)
           setToken(null)
-          setAuthHeader(undefined)   
+          setAuthHeader(undefined)
           clearLogoutTimer()
           if (!publicPaths.has(window.location.pathname)) {
             router.replace('/login')
@@ -334,7 +198,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('storage', onStorage)
   }, [refreshUser, router])
 
-  const canShowChildren = mounted && !loading && (isPublic || !!user)
+  // เงื่อนไขการแสดง overlay (logical เท่านั้น)
+  const showOverlay =
+    loading ||
+    (!user && !isPublic) ||
+    (user && isPublic)
 
   return (
     <AuthContext.Provider
@@ -348,26 +216,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         refreshUser,
       }}
     >
-      {canShowChildren ? (
-        children
-      ) : (
-        <div
-          suppressHydrationWarning
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            minHeight: '100vh',
-            textAlign: 'center',
-            backgroundColor: '#fff',
-          }}
-        >
-          <AnimatedLogo />
-          <LoadingDots />
-        </div>
-      )}
+      {/* แสดง Layout/Children ตลอด — Topbar/Sidebar ไม่หาย */}
+      {children}
+
+      {/* Overlay ผ่าน Portal หลัง mount เพื่อกัน hydration mismatch */}
+      <FullPageOverlay open={mounted && showOverlay} />
     </AuthContext.Provider>
+  )
+}
+
+/** Overlay แบบ Method B: จองพื้นที่ LoadingDots + คุมด้วย visibility/opacity */
+function FullPageOverlay({ open }: { open: boolean }) {
+  const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
+
+  useEffect(() => {
+    // หลัง mount ค่อยหา #modal-root
+    setPortalHost(document.getElementById('modal-root'))
+  }, [])
+
+  if (!portalHost || !open) return null
+
+  return createPortal(
+    <div
+      // ไม่มี suppressHydrationWarning ก็ได้ เพราะไม่ SSR เลย
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(255,255,255,0.9)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        zIndex: 9999,
+        gap: 12, // เว้นช่องโลโก้กับจุดๆ
+      }}
+    >
+      <AnimatedLogo />
+
+      {/* Container ของแถวจุด: สูงคงที่เสมอ ป้องกัน layout shift */}
+      <div
+        style={{
+          height: 28,            // ปรับตามความสูงจริงของ LoadingDots (เช่น 24–32)
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          visibility: 'visible', // ถ้าวันไหนอยากซ่อน ให้สลับ visible/hidden
+          opacity: 1,            // ถ้าจะเฟด: 0 -> 1
+          transition: 'opacity 200ms ease',
+        }}
+      >
+        <LoadingDots />
+      </div>
+    </div>,
+    portalHost
   )
 }
 

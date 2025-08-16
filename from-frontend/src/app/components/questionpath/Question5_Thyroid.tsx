@@ -56,7 +56,6 @@ export default function Question5_Thyroid({ onResult, type }: ThyroidProps) {
       const isEven = dayOfMonth % 2 === 0
       clinic = [isEven ? 'ent' : 'surg']
       symptoms.push('thyroid_followup')
-      noteParts.push('Follow-up', isEven ? 'วันคู่ → ENT' : 'วันคี่ → ศัลย์')
     }
 
     if (hasPalpTremor) {

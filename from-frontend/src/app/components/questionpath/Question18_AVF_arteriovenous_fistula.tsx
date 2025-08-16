@@ -7,9 +7,8 @@ export interface Question18Result {
   question_code: number
   question_title: string
   clinic: string[]
-  note: string
+  note: string | null   // เปลี่ยนเป็น string | null
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
   type: string
 }
@@ -22,8 +21,8 @@ interface Props {
 export default function Question18_AVFWound({ onResult, type }: Props) {
   const [extraNote, setExtraNote] = useState('')
 
-  // กันยิง onResult ซ้ำ/วนลูป
   const prevKeyRef = useRef<string>('')
+
   const onResultRef = useRef(onResult)
   useEffect(() => {
     onResultRef.current = onResult
@@ -33,13 +32,13 @@ export default function Question18_AVFWound({ onResult, type }: Props) {
     const trimmed = extraNote.trim()
 
     const symptoms = ['avf_wound']
-    if (trimmed) symptoms.push('custom_note')
+    if (trimmed) symptoms.push('avf_note')
 
-    const note = trimmed || 'ติดตามแผล AVF'
+    // ถ้าไม่มีการกรอก note → ใช้ null
+    const note = trimmed || null
     const clinic = ['surg']
-    const isReferCase = true
 
-    const key = JSON.stringify({ clinic, note, symptoms, isReferCase, type })
+    const key = JSON.stringify({ clinic, note, symptoms, type })
     if (prevKeyRef.current !== key) {
       prevKeyRef.current = key
       onResultRef.current({
@@ -49,7 +48,6 @@ export default function Question18_AVFWound({ onResult, type }: Props) {
         clinic,
         note,
         symptoms,
-        isReferCase,
         routedBy: 'auto',
         type,
       })
@@ -58,13 +56,10 @@ export default function Question18_AVFWound({ onResult, type }: Props) {
 
   return (
     <div className="text-sm text-gray-800 space-y-3">
-      {/* คำอธิบาย (ปล่อยให้ parent เป็นคนทำกรอบ/การ์ด) */}
       <p className="leading-relaxed">
-        แผลที่เกิดจากการผ่าตัดเส้นเลือดเพื่อทำการล้างไต
-        (AVF - arteriovenous fistula)
+        แผลที่เกิดจากการผ่าตัดเส้นเลือดเพื่อทำการล้างไต (AVF - arteriovenous fistula)
       </p>
 
-      {/* หมายเหตุเพิ่มเติม */}
       <div className="space-y-1.5">
         <label htmlFor="extraNote" className="block font-medium">
           หมายเหตุเพิ่มเติม (ถ้ามี)

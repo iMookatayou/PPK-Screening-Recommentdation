@@ -9,6 +9,7 @@ import { motion } from 'framer-motion';
 import styles from './styles/AdminUsers.module.css';
 import LoadingSpinner from '@/app/components/ui/LoadingSpinner';
 import { authAxios } from '@/lib/axios';
+import ModalPortal from '@/app/components/internal/ModalPortal';
 
 type Status = 'pending' | 'approved' | 'rejected';
 type StatusFilter = 'all' | Status;
@@ -470,182 +471,187 @@ export default function AdminUsersPage() {
       </div>
 
       {/* ===== Modal: ปฏิเสธ ===== */}
-      {rejectOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="rejectTitle"
-          aria-describedby="rejectHelp"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.3)',
-            display: 'grid',
-            placeItems: 'center',
-            zIndex: 50,
-          }}
-          onClick={cancelReject}
-        >
-          <div
-            role="document"
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              width: 'min(560px, 92vw)',
-              background: '#fff',
-              borderRadius: 12,
-              border: '1px solid #e5e7eb',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-              padding: 20,
-            }}
-          >
-            <h3 id="rejectTitle" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-              ปฏิเสธการอนุมัติผู้ใช้งาน
-            </h3>
-            <p id="rejectHelp" style={{ marginTop: 8, color: '#334155', fontSize: 14 }}>
-              โปรดระบุเหตุผล (ไม่ระบุก็ได้) แล้วกด <b>ยืนยันการปฏิเสธ</b>
-            </p>
-
-            <label htmlFor="rejectReason" style={{ display: 'block', fontSize: 14, marginTop: 8, color: '#111827' }}>
-              เหตุผลการปฏิเสธ
-            </label>
-            <textarea
-              id="rejectReason"
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={4}
-              placeholder="เช่น ข้อมูลไม่ครบถ้วน / ใช้อีเมลองค์กรไม่ถูกต้อง"
+        {rejectOpen && (
+          <ModalPortal lockScroll>
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="rejectTitle"
               aria-describedby="rejectHelp"
               style={{
-                width: '100%',
-                marginTop: 6,
-                padding: '8px 10px',
-                border: '1px solid #cbd5e1',
-                borderRadius: 8,
-                fontFamily: 'inherit',
-                fontSize: 14,
-                resize: 'vertical',
+                position: 'fixed',
+                inset: 0,
+                background: 'rgba(0,0,0,0.35)',
+                display: 'grid',
+                placeItems: 'center',
+                zIndex: 10020,        // สูงกว่า Toast/overlay อื่น
               }}
-            />
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button
-                type="button"
-                onClick={cancelReject}
+              onClick={cancelReject}
+            >
+              <div
+                role="document"
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                  padding: '8px 14px',
-                  borderRadius: 8,
-                  border: '1px solid #cbd5e1',
+                  width: 'min(560px, 92vw)',
                   background: '#fff',
+                  borderRadius: 12,
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                  padding: 20,
                 }}
               >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                onClick={confirmReject}
+              <h3 id="rejectTitle" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                ปฏิเสธการอนุมัติผู้ใช้งาน
+              </h3>
+              <p id="rejectHelp" style={{ marginTop: 8, color: '#334155', fontSize: 14 }}>
+                โปรดระบุเหตุผล (ไม่ระบุก็ได้) แล้วกด <b>ยืนยันการปฏิเสธ</b>
+              </p>
+
+              <label htmlFor="rejectReason" style={{ display: 'block', fontSize: 14, marginTop: 8, color: '#111827' }}>
+                เหตุผลการปฏิเสธ
+              </label>
+              <textarea
+                id="rejectReason"
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={4}
+                placeholder="เช่น ข้อมูลไม่ครบถ้วน / ใช้อีเมลองค์กรไม่ถูกต้อง"
+                aria-describedby="rejectHelp"
                 style={{
-                  padding: '8px 14px',
+                  width: '100%',
+                  marginTop: 6,
+                  padding: '8px 10px',
+                  border: '1px solid #cbd5e1',
                   borderRadius: 8,
-                  border: 0,
-                  background: '#dc2626',
-                  color: '#fff',
+                  fontFamily: 'inherit',
+                  fontSize: 14,
+                  resize: 'vertical',
                 }}
-              >
-                ยืนยันการปฏิเสธ
-              </button>
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={cancelReject}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: '#fff',
+                  }}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmReject}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: 0,
+                    background: '#dc2626',
+                    color: '#fff',
+                  }}
+                >
+                  ยืนยันการปฏิเสธ
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
 
       {/* ===== Modal: อนุญาตสมัครใหม่ ===== */}
-      {reapplyOpen && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="reapplyTitle"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            background: 'rgba(0,0,0,0.3)',
-            display: 'grid',
-            placeItems: 'center',
-            zIndex: 50,
-          }}
-          onClick={cancelAllowReapply}
-        >
+       {reapplyOpen && (
+        <ModalPortal lockScroll>
           <div
-            role="document"
-            onClick={(e) => e.stopPropagation()}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="reapplyTitle"
             style={{
-              width: 'min(520px, 92vw)',
-              background: '#fff',
-              borderRadius: 12,
-              border: '1px solid #e5e7eb',
-              boxShadow: '0 10px 30px rgba(0,0,0,0.1)',
-              padding: 20,
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.35)',
+              display: 'grid',
+              placeItems: 'center',
+              zIndex: 200000,       
+              pointerEvents: 'auto',
             }}
-          >
-            <h3 id="reapplyTitle" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
-              อนุญาตให้สมัครใหม่
-            </h3>
-            <p style={{ marginTop: 8, color: '#334155', fontSize: 14 }}>
-              ระบุจำนวนวันสำหรับสิทธิ์การสมัครใหม่ (เช่น 30 วัน) หรือปล่อยว่างเพื่ออนุญาตโดยไม่กำหนดวันหมดสิทธิ์
-            </p>
-
-            <label htmlFor="reapplyDays" style={{ display: 'block', fontSize: 14, marginTop: 8, color: '#111827' }}>
-              จำนวนวัน (เว้นว่างได้)
-            </label>
-            <input
-              id="reapplyDays"
-              type="number"
-              min={1}
-              placeholder="30"
-              value={Number.isFinite(reapplyDays) ? reapplyDays : ('' as any)}
-              onChange={(e) => {
-                const v = e.target.value === '' ? NaN : parseInt(e.target.value, 10);
-                setReapplyDays(Number.isNaN(v) ? (NaN as any) : v);
-              }}
-              style={{
-                width: '120px',
-                marginTop: 6,
-                padding: '8px 10px',
-                border: '1px solid #cbd5e1',
-                borderRadius: 8,
-                fontFamily: 'inherit',
-                fontSize: 14,
-              }}
-            />
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
-              <button
-                type="button"
-                onClick={cancelAllowReapply}
+            onClick={cancelAllowReapply}
+             >
+            <div
+                role="document"
+                onClick={(e) => e.stopPropagation()}
                 style={{
-                  padding: '8px 14px',
-                  borderRadius: 8,
-                  border: '1px solid #cbd5e1',
+                  width: 'min(560px, 92vw)',
                   background: '#fff',
+                  borderRadius: 12,
+                  border: '1px solid #e5e7eb',
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                  padding: 20,
                 }}
               >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                onClick={confirmAllowReapply}
+              <h3 id="reapplyTitle" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
+                อนุญาตให้สมัครใหม่
+              </h3>
+              <p style={{ marginTop: 8, color: '#334155', fontSize: 14 }}>
+                ระบุจำนวนวันสำหรับสิทธิ์การสมัครใหม่ (เช่น 30 วัน) หรือปล่อยว่างเพื่ออนุญาตโดยไม่กำหนดวันหมดสิทธิ์
+              </p>
+
+              <label htmlFor="reapplyDays" style={{ display: 'block', fontSize: 14, marginTop: 8, color: '#111827' }}>
+                จำนวนวัน (เว้นว่างได้)
+              </label>
+              <input
+                id="reapplyDays"
+                type="number"
+                min={1}
+                placeholder="30"
+                value={Number.isFinite(reapplyDays) ? reapplyDays : ('' as any)}
+                onChange={(e) => {
+                  const v = e.target.value === '' ? NaN : parseInt(e.target.value, 10);
+                  setReapplyDays(Number.isNaN(v) ? (NaN as any) : v);
+                }}
                 style={{
-                  padding: '8px 14px',
+                  width: '120px',
+                  marginTop: 6,
+                  padding: '8px 10px',
+                  border: '1px solid #cbd5e1',
                   borderRadius: 8,
-                  border: 0,
-                  background: '#2563eb',
-                  color: '#fff',
+                  fontFamily: 'inherit',
+                  fontSize: 14,
                 }}
-              >
-                อนุญาตสมัครใหม่
-              </button>
+              />
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
+                <button
+                  type="button"
+                  onClick={cancelAllowReapply}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: '#fff',
+                  }}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmAllowReapply}
+                  style={{
+                    padding: '8px 14px',
+                    borderRadius: 8,
+                    border: 0,
+                    background: '#2563eb',
+                    color: '#fff',
+                  }}
+                >
+                  อนุญาตสมัครใหม่
+                </button>
+              </div>
             </div>
           </div>
-        </div>
+        </ModalPortal>
       )}
     </div>
   );

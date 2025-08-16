@@ -9,8 +9,9 @@ export interface Question10Result {
   clinic: string[]
   note: string
   symptoms: string[]
-  isReferCase: boolean
   type: string
+  // ไม่มี refer ในข้อนี้
+  // isReferCase?: boolean
 }
 
 interface Question10Props {
@@ -21,7 +22,6 @@ interface Question10Props {
 export default function Question10_Injury({ onResult, type }: Question10Props) {
   const [choice, setChoice] = useState<'' | 'stable' | 'treated'>('')
   const [hasCaseDoc, setHasCaseDoc] = useState<boolean | null>(null)
-  const [isReferCase, setIsReferCase] = useState(false) // << ใช้งานจริงแล้ว
   const [noteExtra, setNoteExtra] = useState('')
 
   // ทำ onResult ให้เสถียร
@@ -29,12 +29,13 @@ export default function Question10_Injury({ onResult, type }: Question10Props) {
   useEffect(() => { onResultRef.current = onResult }, [onResult])
 
   const computed = useMemo(() => {
-    // ยังไม่ครบ ต้องเลือก choice + hasCaseDoc ก่อน
+    // ต้องเลือกทั้งสถานการณ์ + ใบคดี ก่อน
     if (!choice || hasCaseDoc === null) {
       return { key: `WAIT|${choice}|${hasCaseDoc}`, result: null as Question10Result | null }
     }
 
-    const symptoms: string[] = ['injury', 'no_injury'] // ตามที่คอมเมนต์บอกให้ส่งทั้งคู่
+    const clinic = ['nite'] as const // ✅ ตามเงื่อนไข: ส่ง NITE ทั้งสองกรณี
+    const symptoms: string[] = ['injury', 'no_injury'] // ตามที่ระบุให้ส่งทั้งคู่
     const noteParts: string[] = []
 
     if (choice === 'stable') {
@@ -53,35 +54,27 @@ export default function Question10_Injury({ onResult, type }: Question10Props) {
       noteParts.push('ไม่มีใบคดี')
     }
 
-    // Case refer
-    if (isReferCase) {
-      symptoms.push('manual_refer')
-      noteParts.push('เคส Refer ที่ไม่ได้ส่งตามระบบ')
-    }
-
     const extra = noteExtra.trim()
     if (extra) {
       noteParts.push(extra)
-      symptoms.push('injury_note') // เดิม oscc_note → ปรับให้สอดคล้องแบบฟอร์มนี้
+      symptoms.push('injury_note')
     }
 
     const note = noteParts.join(' | ')
-    const clinic = isReferCase ? ['muang'] : ['nite'] // refer → เมือง / ไม่ refer → NITE
 
     const result: Question10Result = {
       question: 'InjuryCase',
       question_code: 10,
       question_title: 'ประเมินเคสบาดเจ็บ',
-      clinic,
+      clinic: [...clinic],
       note,
       symptoms,
-      isReferCase,
       type,
     }
 
-    const key = JSON.stringify({ choice, hasCaseDoc, isReferCase, extra, clinic, symptoms, note, type })
+    const key = JSON.stringify({ choice, hasCaseDoc, extra, symptoms, note, type })
     return { key, result }
-  }, [choice, hasCaseDoc, isReferCase, noteExtra, type])
+  }, [choice, hasCaseDoc, noteExtra, type])
 
   // กันยิงซ้ำค่าเดิม
   const prevKeyRef = useRef<string | null>(null)
@@ -144,19 +137,6 @@ export default function Question10_Injury({ onResult, type }: Question10Props) {
             ไม่มีใบคดี
           </label>
         </div>
-      </div>
-
-      {/* ✅ เพิ่มช่องติ๊ก Case Refer */}
-      <div>
-        <label className="inline-flex items-center mt-2">
-          <input
-            type="checkbox"
-            checked={isReferCase}
-            onChange={(e) => setIsReferCase(e.target.checked)}
-            className="mr-2"
-          />
-          Case Refer ที่ไม่ได้ส่งตามระบบ
-        </label>
       </div>
 
       <div>

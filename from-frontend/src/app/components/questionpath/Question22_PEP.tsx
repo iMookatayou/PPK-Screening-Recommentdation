@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
 export interface Question22Result {
   question: string
@@ -9,7 +9,6 @@ export interface Question22Result {
   clinic: string[]
   note: string
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
   type: string
 }
@@ -22,35 +21,43 @@ interface Props {
 export default function Question22_PEP({ onResult, type }: Props) {
   const [note, setNote] = useState('')
   const [isAfterHours, setIsAfterHours] = useState(false)
+
+  // ทำ onResult ให้เสถียร และกันยิงซ้ำ
+  const onResultRef = useRef(onResult)
+  useEffect(() => { onResultRef.current = onResult }, [onResult])
   const prevKey = useRef('')
 
   useEffect(() => {
     const trimmed = note.trim()
 
-    const symptoms = ['occupational_pep', ...(trimmed ? ['custom_note'] : [])]
-    const finalNote =
-      trimmed ? `${trimmed}` : 'ขอรับ PEP เจ้าหน้าที่'
+    // symptoms
+    const symptoms: string[] = ['occupational_pep', isAfterHours ? 'after_hours' : 'in_hours']
+    if (trimmed) symptoms.push('occupational_note')
 
-    // ในเวลาราชการไปอาชีวเวชกรรม นอกเวลาราชการไป ER
+    // routing
     const clinic = isAfterHours ? ['er'] : ['occmed']
-    const isReferCase = true
 
-    const key = JSON.stringify({ clinic, finalNote, symptoms, isReferCase, type })
+    // note: บันทึกช่วงเวลา + หมายเหตุผู้ใช้ (ถ้ามี)
+    const noteParts = [isAfterHours ? 'กรณีนอกเวลาราชการ' : 'กรณีในเวลาราชการ']
+    if (trimmed) noteParts.push(trimmed)
+    const finalNote = noteParts.join(' | ')
+
+    // กันยิงซ้ำ และต้องอัปเดตเมื่อ note เปลี่ยน
+    const key = JSON.stringify({ clinic, symptoms, finalNote, type })
     if (prevKey.current !== key) {
       prevKey.current = key
-      onResult({
+      onResultRef.current({
         question: 'OccupationalPEP',
         question_code: 22,
         question_title: 'PEP สำหรับเจ้าหน้าที่ (Occupational PEP)',
         clinic,
         note: finalNote,
         symptoms,
-        isReferCase,
         routedBy: 'auto',
         type,
       })
     }
-  }, [note, isAfterHours, type, onResult])
+  }, [note, isAfterHours, type])
 
   return (
     <div className="flex flex-col gap-2 text-sm text-gray-800">

@@ -25,16 +25,34 @@ function ensureAxiosHeaders(config: InternalAxiosRequestConfig): AxiosHeaders {
     return ah
   }
   if (h instanceof AxiosHeaders) return h
-  // แปลง plain object → AxiosHeaders แล้ว set กลับ
-  const ah = AxiosHeaders.from(h)
+  const ah = AxiosHeaders.from(h) // แปลง plain object → AxiosHeaders
   config.headers = ah
   return ah
 }
 
 function setJsonHeaders(config: InternalAxiosRequestConfig) {
   const headers = ensureAxiosHeaders(config)
-  headers.set('Accept', 'application/json')
-  headers.set('Content-Type', 'application/json')
+
+  // อย่าทับ header ที่ caller ตั้งมาเอง
+  if (!headers.has('Accept')) headers.set('Accept', 'application/json')
+
+  // ถ้าเป็น FormData → ปล่อยให้ browser ใส่ boundary เอง (ไม่เซ็ต Content-Type)
+  const isForm =
+    typeof FormData !== 'undefined' && config.data instanceof FormData
+
+  if (!headers.has('Content-Type') && !isForm) {
+    headers.set('Content-Type', 'application/json')
+  }
+}
+
+function normalizeAxiosError(error: AxiosError) {
+  // ไม่เปลี่ยน shape ของ error (เพื่อไม่กระทบ handler เดิม) — แค่ปรับ message ให้อ่านง่ายขึ้น
+  if (error.code === 'ECONNABORTED') {
+    error.message ||= 'คำขอหมดเวลา กรุณาลองใหม่'
+  } else if (error.message === 'Network Error') {
+    error.message = 'เครือข่ายมีปัญหา หรือเซิร์ฟเวอร์ไม่ตอบสนอง'
+  }
+  return error
 }
 
 // ---- Public instance (สำหรับ login/register ฯลฯ) ----
@@ -51,6 +69,11 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 )
 
+api.interceptors.response.use(
+  (res) => res,
+  (error: AxiosError) => Promise.reject(normalizeAxiosError(error))
+)
+
 // ---- Protected instance (แนบ Bearer อัตโนมัติ) ----
 export const authAxios: AxiosInstance = axios.create({
   baseURL,
@@ -64,7 +87,10 @@ authAxios.interceptors.request.use(
       const token = localStorage.getItem('token')
       if (token) {
         const headers = ensureAxiosHeaders(config)
-        headers.set('Authorization', `Bearer ${token}`)
+        // อย่าทับถ้ามีการตั้ง Authorization เอง (กรณีพิเศษ)
+        if (!headers.has('Authorization')) {
+          headers.set('Authorization', `Bearer ${token}`)
+        }
       }
     }
     return config
@@ -76,7 +102,7 @@ authAxios.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
     const status = error.response?.status
-    // 401: Unauthorized, 419: Laravel session/token expired
+    // 401: Unauthorized, 419: Laravel token expired
     if (status === 401 || status === 419) {
       try {
         localStorage.setItem(
@@ -85,7 +111,7 @@ authAxios.interceptors.response.use(
         )
       } catch {}
     }
-    return Promise.reject(error)
+    return Promise.reject(normalizeAxiosError(error))
   }
 )
 
@@ -93,9 +119,14 @@ authAxios.interceptors.response.use(
 export function setAuthHeader(token?: string) {
   if (token) {
     authAxios.defaults.headers.common['Authorization'] = `Bearer ${token}`
-    try { localStorage.setItem('token', token) } catch {}
+    try {
+      localStorage.setItem('token', token)
+    } catch {}
   } else {
     delete authAxios.defaults.headers.common['Authorization']
+    try {
+      localStorage.removeItem('token')
+    } catch {}
   }
 }
 

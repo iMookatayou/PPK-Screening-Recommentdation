@@ -9,7 +9,6 @@ export interface Question21Result {
   clinic: string[]
   note: string
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
   type: string
 }
@@ -26,11 +25,9 @@ export default function Question21_HIV({ onResult, type }: Question21_HIVProps) 
   useEffect(() => {
     const trimmed = note.trim()
     const symptoms = ['hiv_exposure', ...(trimmed ? ['hiv_note'] : [])]
-    const noteText = trimmed || 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV'
     const clinic = ['er']
-    const isReferCase = true
 
-    const currentKey = JSON.stringify({ noteText, symptoms, clinic, isReferCase, type })
+    const currentKey = JSON.stringify({ symptoms, clinic, type })
     if (prevKey.current !== currentKey) {
       prevKey.current = currentKey
       onResult({
@@ -38,9 +35,8 @@ export default function Question21_HIV({ onResult, type }: Question21_HIVProps) 
         question_code: 21,
         question_title: 'ผู้สัมผัสหรือสงสัยติดเชื้อ HIV',
         clinic,
-        note: noteText,
+        note,
         symptoms,
-        isReferCase,
         routedBy: 'auto',
         type,
       })

@@ -1,18 +1,22 @@
 @font-face {
   font-family: 'Sarabun';
-  src: url('/fonts/sarabun/Sarabun-Regular.woff2') format('truetype');
+  src: url('/fonts/sarabun/Sarabun-Regular.woff2') format('woff2');
   font-weight: 400;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Sarabun';
-  src: url('/fonts/sarabun/Sarabun-SemiBold.woff2') format('truetype');
+  src: url('/fonts/sarabun/Sarabun-SemiBold.woff2') format('woff2');
   font-weight: 600;
+  font-display: swap;
 }
 @font-face {
   font-family: 'Sarabun';
-  src: url('/fonts/sarabun/Sarabun-Bold.woff2') format('truetype');
+  src: url('/fonts/sarabun/Sarabun-Bold.woff2') format('woff2');
   font-weight: 700;
+  font-display: swap;
 }
+
 
 .loginBackground {
   background: url('/images/background3.png') no-repeat center center fixed;
@@ -238,97 +242,6 @@
   font-weight: 500;
 }
 
-@media (max-width: 600px) {
-  .loginCard {
-    width: 100%;
-    margin: 0 1rem;
-    padding: 24px;
-  }
-
-  .loginHeader {
-    font-size: 18px;
-    margin-bottom: 24px;
-  }
-
-  .inputGroup input {
-    font-size: 0.95rem;
-    padding: 0.55rem 2.2rem 0.55rem 2rem;
-  }
-
-  .left button {
-    font-size: 15px;
-    padding: 10px;
-  }
-
-  .successContainer {
-    padding: 1.5rem;
-  }
-
-  .successMessage {
-    font-size: 1.2rem;
-  }
-
-  .successSubtext {
-    font-size: 0.9rem;
-  }
-
-  .loadingBox {
-    min-height: 400px;
-    padding: 24px;
-  }
-
-  .loader {
-    width: 32px;
-    height: 32px;
-    border-width: 3px;
-  }
-
-  .loadingText {
-    font-size: 0.95rem;
-  }
-}
-
-@media (min-width: 601px) and (max-width: 900px) {
-  .loginCard {
-    width: 90%;
-    padding: 32px;
-  }
-
-  .loginHeader {
-    font-size: 20px;
-  }
-
-  .inputGroup input {
-    font-size: 1rem;
-  }
-
-  .left button {
-    font-size: 15px;
-  }
-
-  .loadingBox {
-    min-height: 450px;
-  }
-}
-
-@media (min-width: 901px) and (max-width: 1200px) {
-  .loginCard {
-    width: 420px;
-  }
-
-  .loginHeader {
-    font-size: 21px;
-  }
-
-  .inputGroup input {
-    font-size: 1rem;
-  }
-
-  .left button {
-    font-size: 15.5px;
-  }
-}
-
 .registerLinkWrapper {
   margin-top: 0.75rem;
   text-align: center;
@@ -346,4 +259,33 @@
 .registerLink:hover {
   color: #1d4ed8;
   text-decoration: underline;
+}
+
+/* ===== iPad Portrait (768–820px) ===== */
+@media (min-width: 768px) and (max-width: 820px) {
+  .loginCard {
+    width: 95%;
+    padding: 28px;
+  }
+  .loginHeader {
+    font-size: 20px;
+  }
+  .left button {
+    font-size: 15.5px;
+    padding: 11px;
+  }
+}
+
+/* ===== iPad Landscape (821–1024px) ===== */
+@media (min-width: 821px) and (max-width: 1024px) {
+  .loginCard {
+    width: 480px;
+    padding: 36px;
+  }
+  .loginHeader {
+    font-size: 21px;
+  }
+  .left button {
+    font-size: 16px;
+  }
 }

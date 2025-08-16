@@ -313,25 +313,54 @@
   transform: translateY(-1px);
 }
 
-/* ------------------ Tablet (768px–1024px) ------------------ */
-@media (min-width: 768px) and (max-width: 1024px) {
-  .formppk-wrapper {
-    padding: 2rem 1.5rem;
-    margin: 1.5rem auto;
+/* ===== iPad Portrait (768–820px): อ่านง่าย กดง่าย ===== */
+@media (min-width:768px) and (max-width:820px){
+  /* แถวเลือกคำถาม + ปุ่มล้าง จัดเป็นคอลัมน์ */
+  .formppk-question-select-row{
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
   }
 
-  .formppk-title {
-    font-size: 1.9rem;
-  }
-
-  .formppk-questions-container {
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  /* กล่องคำถาม: 1 คอลัมน์กว้างๆ */
+  .formppk-questions-container{
+    grid-template-columns: 1fr;
     gap: 1.25rem;
   }
 
+  /* ปุ่มให้สูงพอดีนิ้ว */
   .formppk-btn-clear,
-  .formppk-btn-confirm {
-    font-size: 0.95rem;
-    padding: 0.6rem 1.4rem;
+  .formppk-btn-confirm{
+    height: 44px;
+    font-size: 1rem;
+  }
+}
+
+/* ===== iPad Landscape (821–1024px): สองคอลัมน์ลื่น ๆ ===== */
+@media (min-width:821px) and (max-width:1024px){
+  /* สองคอลัมน์สมดุลบนแนวนอน */
+  .formppk-questions-container{
+    grid-template-columns: repeat(2, minmax(360px, 1fr));
+    gap: 1.25rem 1.5rem;
+  }
+
+  /* แถว select: ซ้ายยืด, ปุ่มล้างชิดขวา */
+  .formppk-question-select-row{
+    flex-direction: row;
+    align-items: flex-end;
+  }
+  .formppk-question-select-box{
+    flex: 1 1 auto;
+  }
+  .formppk-btn-clear{
+    flex: 0 0 auto;
+  }
+}
+
+/* ===== Desktop กว้างมาก (≥1280px): ใช้พื้นที่ให้คุ้ม ===== */
+@media (min-width:1280px){
+  .formppk-questions-container{
+    grid-template-columns: repeat(2, minmax(420px, 1fr));
+    gap: 1.75rem;
   }
 }

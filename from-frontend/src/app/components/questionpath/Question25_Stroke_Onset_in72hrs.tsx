@@ -9,7 +9,6 @@ export interface Question25Result {
   clinic: string[]
   note: string
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
   type: string
 }
@@ -77,9 +76,8 @@ export default function Question25_StrokeSuspect({ onResult, type }: Props) {
       ...(vitalStable ? ['vital_stable'] : []),
       ...(trimmedNote ? ['stroke_onset_note'] : []),
     ]
-    const isReferCase = true
 
-    const key = JSON.stringify({ clinic, finalNote, symptoms, isReferCase, type })
+    const key = JSON.stringify({ clinic, finalNote, symptoms, type })
     if (prevKey.current !== key) {
       prevKey.current = key
       onResult({
@@ -89,7 +87,6 @@ export default function Question25_StrokeSuspect({ onResult, type }: Props) {
         clinic: clinic!,
         note: finalNote,
         symptoms,
-        isReferCase,
         routedBy: 'auto',
         type,
       })

@@ -9,7 +9,6 @@ export interface Question19Result {
   clinic: string[]
   note: string
   symptoms: string[]
-  isReferCase: boolean
   routedBy: 'auto'
   type: string
 }
@@ -30,9 +29,8 @@ export default function Question19_PermCath({ onResult, type }: Props) {
 
     const finalNote = trimmedNote || 'ติดตามแผล Perm-Cath'
     const clinic = ['med']
-    const isReferCase = true
 
-    const resultKey = JSON.stringify({ finalNote, clinic, symptoms, isReferCase, type })
+    const resultKey = JSON.stringify({ finalNote, clinic, symptoms, type })
     if (prevKey.current !== resultKey) {
       prevKey.current = resultKey
       onResult({
@@ -42,7 +40,6 @@ export default function Question19_PermCath({ onResult, type }: Props) {
         clinic,
         note: finalNote,
         symptoms,
-        isReferCase,
         routedBy: 'auto',
         type,
       })

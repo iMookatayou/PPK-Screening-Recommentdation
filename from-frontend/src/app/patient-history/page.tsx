@@ -1,20 +1,21 @@
-"use client";
+'use client';
 
-import React, { useMemo, useState, useRef, useCallback } from "react";
-import { authAxios } from "@/lib/axios";
-import { clinicLabelMap } from "@/app/components/questionpath/clinicLabelMap";
-import { ClipboardList, Search as IconSearch, CalendarRange } from "lucide-react";
-import styles from "./styles/PatientHistory.module.css";
-import { motion, AnimatePresence } from "framer-motion";
-import { useToast } from "@/app/components/ui/popup/ToastProvider";
+import React, { useMemo, useState, useRef, useCallback } from 'react';
+import { authAxios } from '@/lib/axios';
+import { clinicLabelMap } from '@/app/components/questionpath/clinicLabelMap';
+import { ClipboardList, Search as IconSearch, CalendarRange } from 'lucide-react';
+import styles from './styles/PatientHistory.module.css';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useToast } from '@/app/components/ui/popup/ToastProvider';
+import LoadingSpinner from '@/app/components/ui/LoadingSpinner';
 
 /* ===================== Types ===================== */
 type LiteItem = {
   case_id: string;
   name: string;
   created_at: string;              // "Y-m-d H:i:s"
-  summary_clinics?: string[];
-  symptoms?: string[];
+  summary_clinics?: string[] | any[] | string | null;
+  symptoms?: string[] | any[] | string | null;
 };
 type LaravelPaginator<T> = {
   data: T[];
@@ -34,9 +35,9 @@ type DetailQR = {
   symptoms?: string[];
   note?: string | null;
   is_refer_case: boolean;
-  type: "form" | "guide" | "referral" | "kiosk";
+  type: 'form' | 'guide' | 'referral' | 'kiosk';
   routed_by?: string | null;
-  created_at?: string;            
+  created_at?: string;
 };
 type DetailCase = {
   case_id: string;
@@ -51,38 +52,128 @@ type DetailCase = {
   created_at: string;
   question_results: DetailQR[];
 };
-// Envelope
 type ApiResp<T> = { code: string; message: string; data: T; errors?: unknown };
 
 /* ===================== Utils ===================== */
 function fmt(dt?: string) {
-  if (!dt) return "—";
-  const iso = dt.includes("T") ? dt : dt.replace(" ", "T");
-  return new Intl.DateTimeFormat("th-TH", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "Asia/Bangkok",
+  if (!dt) return '—';
+  const iso = dt.includes('T') ? dt : dt.replace(' ', 'T');
+  return new Intl.DateTimeFormat('th-TH', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+    timeZone: 'Asia/Bangkok',
   }).format(new Date(iso));
 }
-function clinicText(codes?: string[]) {
-  if (!codes?.length) return "";
-  return codes.map((c) => clinicLabelMap[c] || c).join(", ");
+
+function clinicTextAll(codes?: string[] | any[] | string | null) {
+  const arr = toStringList(codes);
+  if (!arr.length) return '';
+  return arr.map((c) => clinicLabelMap[c] || c).join(', ');
 }
-function guessLiteTitle(row: LiteItem) {
-  if (row.symptoms?.length) return row.symptoms.slice(0, 2).join(", ");
-  const ct = clinicText(row.summary_clinics);
-  return ct || "ไม่ระบุ";
+
+/** รองรับ string | string[] | object[] | null */
+function toStringList(input: unknown): string[] {
+  if (!input) return [];
+  if (typeof input === 'string') {
+    const s = input.trim();
+    if (!s) return [];
+    if (s.includes(',')) return s.split(',').map(x => x.trim()).filter(Boolean);
+    return [s];
+  }
+  if (Array.isArray(input)) {
+    return input
+      .map((it) => {
+        if (typeof it === 'string') return it;
+        if (it && typeof it === 'object') {
+          const o = it as any;
+          return (
+            o.label ??
+            o.name ??
+            o.symptom ??
+            o.value ??
+            o.text ??
+            o.code ??
+            ''
+          );
+        }
+        return '';
+      })
+      .map(x => String(x ?? '').trim())
+      .filter(Boolean);
+  }
+  return [String(input)];
 }
+
+// ===== Utils: filter & format symptoms =====
+const SYM_EXCLUDE = new RegExp(
+  String.raw`(^note$|^flag$|^in_hours$|^has_case_doc$|^stable$|^no_injury$|(_|^)(pain_)?scale(_\d+)?$|(_|^)(score|grade)(_\d+)?$)`,
+  'i'
+);
+
+function filterSymptoms(sym?: string[] | any[] | string | null): string[] {
+  const base = toStringList(sym);
+  const out = base
+    .map(s => (typeof s === 'string' ? s.trim() : ''))
+    .filter(Boolean)
+    .filter(s => !SYM_EXCLUDE.test(s.toLowerCase()));
+  // unique
+  return Array.from(new Set(out));
+}
+
+/** ใช้ในตาราง: คืนค่า ReactNode */
+function formatSymptoms(sym?: string[] | any[] | string | null, limit = 3): React.ReactNode {
+  const arr = filterSymptoms(sym);
+  if (!arr.length) return '—';
+
+  if (arr.length <= limit) {
+    return <span className={styles.symText}>{arr.join(', ')}</span>;
+  }
+
+  const head = arr.slice(0, limit).join(', ');
+  const more = arr.length - limit;
+
+  return (
+    <>
+      <span className={styles.symText}>{head}</span>
+      <span className={styles.badgeMore}>+{more} เพิ่มเติม</span>
+    </>
+  );
+}
+
+/** ใช้ใน <option>: ต้องเป็น string ล้วน หลีกเลี่ยง [object Object] */
+function formatSymptomsText(sym?: string[] | any[] | string | null, limit = 3): string {
+  const arr = filterSymptoms(sym);
+  if (!arr.length) return '—';
+  if (arr.length <= limit) return arr.join(', ');
+  const head = arr.slice(0, limit).join(', ');
+  const more = arr.length - limit;
+  return `${head} +${more} เพิ่มเติม`;
+}
+
+/** label ใน select: แสดงเฉพาะอาการ (ไม่ใส่คลินิก) */
+function makeCaseLabel(row: LiteItem) {
+  const date = fmt(row.created_at);
+  const name = row.name || '-';
+  const symText = formatSymptomsText(row.symptoms); // <<<<<< ใช้ตัวแบบ string
+  return `${date} • ${name} • อาการ: ${symText}`;
+}
+
+function splitSymptoms(sym?: string[] | any[] | string | null, limit = 3) {
+  const arr = filterSymptoms(sym);
+  return { head: arr.slice(0, limit), more: Math.max(0, arr.length - limit) };
+}
+
 function displayGender(g?: string) {
-  if (!g) return "—";
+  if (!g) return '—';
   const s = String(g).trim().toLowerCase();
-  if (s === "1" || s === "m" || s === "male") return "ชาย";
-  if (s === "2" || s === "f" || s === "female") return "หญิง";
-  if (s === "3") return "ไม่ระบุ";
-  if (s.includes("ชาย")) return "ชาย";
-  if (s.includes("หญิง")) return "หญิง";
-  return "ไม่ระบุ";
+  if (s === '1' || s === 'm' || s === 'male') return 'ชาย';
+  if (s === '2' || s === 'f' || s === 'female') return 'หญิง';
+  if (s === '3') return 'ไม่ระบุ';
+  if (s.includes('ชาย')) return 'ชาย';
+  if (s.includes('หญิง')) return 'หญิง';
+  return 'ไม่ระบุ';
 }
+
 function normalizeHistoryPayload(raw: any): LiteResp {
   if (raw?.items && raw?.meta) {
     return {
@@ -111,7 +202,7 @@ function normalizeHistoryPayload(raw: any): LiteResp {
 const cardVar = { hidden: { opacity: 0, y: 12 }, show: { opacity: 1, y: 0, transition: { duration: 0.22 } } };
 const rowVar = {
   hidden: { opacity: 0, y: 8 },
-  show:   (i: number) => ({ opacity: 1, y: 0, transition: { duration: 0.16, delay: i * 0.02 } }),
+  show: (i: number) => ({ opacity: 1, y: 0, transition: { duration: 0.16, delay: i * 0.02 } }),
 };
 const dividerVar = { hidden: { scaleX: 0, opacity: 0 }, show: { scaleX: 1, opacity: 1, transition: { duration: 0.25 } } };
 
@@ -119,96 +210,227 @@ const dividerVar = { hidden: { scaleX: 0, opacity: 0 }, show: { scaleX: 1, opaci
 export default function PatientHistory() {
   const { addToast } = useToast();
 
-  const [cid, setCid] = useState("");
-  const [start, setStart] = useState("");
-  const [end, setEnd] = useState("");
-  const [range, setRange] = useState<"" | "today" | "last_7d" | "last_30d" | "this_month">("");
+  const [cid, setCid] = useState('');
+  const [start, setStart] = useState('');
+  const [end, setEnd] = useState('');
+  const [range, setRange] = useState<'' | 'today' | 'last_7d' | 'last_30d' | 'this_month'>('');
   const [list, setList] = useState<LiteResp | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [selected, setSelected] = useState<string>("");
+  const [selected, setSelected] = useState<string>('');
   const [detail, setDetail] = useState<DetailCase | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchingRef = useRef(false);
 
-  const fetchHistory = useCallback(async (page = 1) => {
-    if (fetchingRef.current) return;
-    setError(null);
+  const fetchHistory = useCallback(
+    async (page = 1) => {
+      if (fetchingRef.current) return;
+      setError(null);
 
-    const onlyDigits = cid.replace(/\D/g, "").slice(0, 13);
-    if (!onlyDigits) {
-      setError("กรุณากรอกเลขบัตรประชาชน (CID)");
-      addToast({ type: "warning", message: "กรุณากรอก CID", position: "top-right" });
-      return;
-    }
-
-    setLoading(true);
-    setDetail(null);
-    setSelected("");
-    fetchingRef.current = true;
-
-    try {
-      const body: any = { cid: onlyDigits, page, per_page: 10 };
-      if (range) body.range = range;
-      else {
-        if (start) body.start_date = start;
-        if (end) body.end_date = end;
+      const onlyDigits = cid.replace(/\D/g, '').slice(0, 13);
+      if (!onlyDigits) {
+        setError('กรุณากรอกเลขบัตรประชาชน (CID)');
+        addToast({ type: 'warning', message: 'กรุณากรอก CID', position: 'top-right' });
+        return;
       }
 
-      const res = await authAxios.post<ApiResp<{ items: LiteItem[]; meta: any }>>(
-        "/patients/history",
-        body,
-        { signal: AbortSignal.timeout(15000) }
-      );
-      const normalized = normalizeHistoryPayload(res.data.data);
-      setList(normalized);
+      setLoading(true);
+      setDetail(null);
+      setSelected('');
+      fetchingRef.current = true;
 
-      if (normalized.meta.total > 0) {
-        addToast({ type: "success", message: `ค้นหาสำเร็จ: พบ ${normalized.meta.total} รายการ`, position: "top-right" });
-      } else {
-        addToast({ type: "info", message: "ไม่พบรายการ", position: "top-right" });
+      try {
+        const body: any = { cid: onlyDigits, page, per_page: 10 };
+        if (range) body.range = range;
+        else {
+          if (start) body.start_date = start;
+          if (end) body.end_date = end;
+        }
+
+        const res = await authAxios.post<ApiResp<{ items: LiteItem[]; meta: any }>>('/patients/history', body, {
+          signal: AbortSignal.timeout(15000),
+        });
+        const normalized = normalizeHistoryPayload(res.data.data);
+        setList(normalized);
+
+        if (normalized.meta.total > 0) {
+          addToast({
+            type: 'success',
+            message: `ค้นหาสำเร็จ: พบ ${normalized.meta.total} รายการ`,
+            position: 'top-right',
+          });
+        } else {
+          addToast({ type: 'info', message: 'ไม่พบรายการ', position: 'top-right' });
+        }
+      } catch (e: any) {
+        const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'โหลดข้อมูลล้มเหลว';
+        setList(null);
+        setError(msg);
+        addToast({ type: 'error', message: `ค้นหาล้มเหลว: ${msg}`, position: 'top-right' });
+      } finally {
+        setLoading(false);
+        fetchingRef.current = false;
       }
-    } catch (e: any) {
-      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || "โหลดข้อมูลล้มเหลว";
-      setList(null);
-      setError(msg);
-      addToast({ type: "error", message: `ค้นหาล้มเหลว: ${msg}`, position: "top-right" });
-    } finally {
-      setLoading(false);
-      fetchingRef.current = false;
-    }
-  }, [cid, range, start, end, addToast]);
+    },
+    [cid, range, start, end, addToast]
+  );
 
-  const pickCase = useCallback(async (case_id: string) => {
-    setSelected(case_id);
-    setDetail(null);
-    if (!case_id) return;
-    setDetailLoading(true);
-    try {
-      const res = await authAxios.post<ApiResp<DetailCase>>(
-        "/form-ppk/show",
-        { case_id },
-        { signal: AbortSignal.timeout(15000) }
-      );
-      setDetail(res.data.data);
-      addToast({ type: "success", message: "โหลดรายละเอียดเคสแล้ว", position: "top-right" });
-    } catch (e: any) {
-      const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || "โหลดรายละเอียดล้มเหลว";
-      setError(msg);
-      addToast({ type: "error", message: `โหลดรายละเอียดล้มเหลว: ${msg}`, position: "top-right" });
-    } finally {
-      setDetailLoading(false);
-    }
-  }, [addToast]);
+  const pickCase = useCallback(
+    async (case_id: string) => {
+      setSelected(case_id);
+      setDetail(null);
+      if (!case_id) return;
+      setDetailLoading(true);
+      try {
+        const res = await authAxios.post<ApiResp<DetailCase>>(
+          '/form-ppk/show',
+          { case_id },
+          { signal: AbortSignal.timeout(15000) }
+        );
+        setDetail(res.data.data);
+        addToast({ type: 'success', message: 'โหลดรายละเอียดเคสแล้ว', position: 'top-right' });
+      } catch (e: any) {
+        const msg = e?.response?.data?.message || e?.response?.data?.error || e?.message || 'โหลดรายละเอียดล้มเหลว';
+        setError(msg);
+        addToast({ type: 'error', message: `โหลดรายละเอียดล้มเหลว: ${msg}`, position: 'top-right' });
+      } finally {
+        setDetailLoading(false);
+      }
+    },
+    [addToast]
+  );
 
   const firstResultTime = useMemo(() => {
     const t = detail?.question_results?.[0]?.created_at;
-    return t ? fmt(t) : "—";
+    return t ? fmt(t) : '—';
   }, [detail]);
 
   const hasMoreThanOnePage = useMemo(() => (list?.meta?.last_page ?? 1) > 1, [list]);
+
+  function CaseDropdown({
+  items,
+  value,
+  onChange,
+}: {
+  items: LiteItem[];
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+
+  const filtered = useMemo(() => {
+    const qq = q.trim().toLowerCase();
+    if (!qq) return items;
+    return items.filter((it) => {
+      const sym = filterSymptoms(it.symptoms).join(" ").toLowerCase();
+      return (
+        it.name.toLowerCase().includes(qq) ||
+        sym.includes(qq) ||
+        fmt(it.created_at).toLowerCase().includes(qq)
+      );
+    });
+  }, [items, q]);
+
+  const selectedItem = items.find((x) => x.case_id === value) || null;
+
+    return (
+      <div className={styles.dropdown}>
+        <label className={styles.label}>เลือกเคส</label>
+
+        <button
+          type="button"
+          className={styles.comboButton}
+          onClick={() => setOpen((v) => !v)}
+          aria-expanded={open ? "true" : "false"}
+          aria-haspopup="listbox"
+        >
+          {selectedItem ? (
+            <>
+              <span className={styles.comboMain}>
+                {fmt(selectedItem.created_at)} • {selectedItem.name}
+              </span>
+              <span className={styles.comboSubs}>
+                {(() => {
+                  const arr = filterSymptoms(selectedItem.symptoms);
+                  const head = arr.slice(0, 3);
+                  const more = Math.max(0, arr.length - 3);
+                  return (
+                    <>
+                      {head.map((s, i) => (
+                        <span key={i} className={styles.chip}>{s}</span>
+                      ))}
+                      {more > 0 && <span className={styles.badgeMore}>+{more} เพิ่มเติม</span>}
+                    </>
+                  );
+                })()}
+              </span>
+            </>
+          ) : (
+            <span className={styles.comboPlaceholder}>— เลือกเคส —</span>
+          )}
+        </button>
+
+        {open && (
+          <div className={styles.comboPanel} role="dialog">
+            <div className={styles.comboSearchRow}>
+              <IconSearch className={styles.comboSearchIcon} />
+              <input
+                className={styles.comboSearch}
+                placeholder="ค้นหาชื่อ / อาการ / วันที่"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                autoFocus
+              />
+            </div>
+
+            <ul className={styles.comboList} role="listbox">
+              {filtered.length === 0 && (
+                <li className={styles.comboEmpty}>ไม่พบรายการ</li>
+              )}
+              {filtered.map((row) => {
+                const all = filterSymptoms(row.symptoms); // << เอาทั้งหมด
+
+                return (
+                  <li
+                    key={row.case_id}
+                    role="option"
+                    aria-selected={value === row.case_id ? "true" : "false"}
+                    className={
+                      value === row.case_id
+                        ? `${styles.comboItem} ${styles.comboItemActive}`
+                        : styles.comboItem
+                    }
+                    onClick={() => {
+                      onChange(row.case_id);
+                    }}
+                  >
+                    <div className={styles.itemTop}>
+                      <span className={styles.itemTime}>{fmt(row.created_at)}</span>
+                      <span className={styles.itemName}>{row.name}</span>
+                    </div>
+
+                    {/* แก้เฉพาะตรงนี้: แสดงทุกอาการเป็นชิป ไม่ต้องมี +N */}
+                    <div className={styles.itemBottom}>
+                      {all.length ? (
+                        all.map((s, i) => (
+                          <span key={i} className={styles.chip}>{s}</span>
+                        ))
+                      ) : (
+                        <span className={styles.muted}>— ไม่มีอาการ —</span>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className={styles.container}>
@@ -218,14 +440,7 @@ export default function PatientHistory() {
       </h2>
 
       {/* Search card */}
-      <motion.div
-        className={styles.card}
-        variants={cardVar}
-        initial="hidden"
-        animate="show"
-        role="search"
-        aria-label="ค้นหาประวัติผู้ป่วย"
-      >
+      <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show" role="search" aria-label="ค้นหาประวัติผู้ป่วย">
         <div className={styles.row}>
           <div className={styles.col4}>
             <label className={styles.label} htmlFor="cidInput">เลขบัตรประชาชน (CID)</label>
@@ -236,7 +451,7 @@ export default function PatientHistory() {
                 name="cid"
                 className={styles.field}
                 value={cid}
-                onChange={(e) => setCid(e.target.value.replace(/\D/g, "").slice(0, 13))}
+                onChange={(e) => setCid(e.target.value.replace(/\D/g, '').slice(0, 13))}
                 placeholder="ค้นหาเลขบัตรประชาชน 13 หลัก"
                 title="กรอกเลขบัตรประชาชน 13 หลัก"
                 aria-label="เลขบัตรประชาชน"
@@ -254,7 +469,7 @@ export default function PatientHistory() {
                 name="range"
                 className={styles.field}
                 value={range}
-                onChange={(e) => { setRange(e.target.value as any); setStart(""); setEnd(""); }}
+                onChange={(e) => { setRange(e.target.value as any); setStart(''); setEnd(''); }}
                 title="เลือกช่วงวันที่สำเร็จรูป"
                 aria-label="เลือกช่วงวันที่สำเร็จรูป"
               >
@@ -265,7 +480,7 @@ export default function PatientHistory() {
                 <option value="this_month">เดือนนี้</option>
               </select>
             </div>
-            <small className={styles.muted + " " + styles.block}>หรือเลือกวันเองด้านขวา</small>
+            <small className={styles.muted + ' ' + styles.block}>หรือเลือกวันเองด้านขวา</small>
           </div>
 
           <div className={styles.col3}>
@@ -276,7 +491,7 @@ export default function PatientHistory() {
               type="date"
               className={styles.field}
               value={start}
-              onChange={(e) => { setRange(""); setStart(e.target.value); }}
+              onChange={(e) => { setRange(''); setStart(e.target.value); }}
               aria-label="วันที่เริ่มต้น"
               title="เลือกวันที่เริ่มต้น"
             />
@@ -290,118 +505,108 @@ export default function PatientHistory() {
               type="date"
               className={styles.field}
               value={end}
-              onChange={(e) => { setRange(""); setEnd(e.target.value); }}
+              onChange={(e) => { setRange(''); setEnd(e.target.value); }}
               aria-label="วันที่สิ้นสุด"
               title="เลือกวันที่สิ้นสุด"
             />
           </div>
 
-          {/* ปุ่มค้นหา: sticky + ยืดตอน loading */}
-            <div className={`${styles.col2} ${styles.alignEnd} ${styles.stickySearch}`}>
-                <button
-                    id="searchBtn"
-                    className={`${styles.btn} ${styles.btnPrimary} ${styles.btnFixed}`}
-                    onClick={() => fetchHistory(1)}
-                    disabled={loading}
-                    title="กดเพื่อค้นหาประวัติ"
-                    aria-label="ค้นหา"
-                >
-                    <span className={styles.btnLabel} data-loading={loading ? "1" : "0"}>
-                    <span className={styles.labelIdle}>ค้นหา</span>
-                    <span className={styles.labelBusy}>กำลังค้นหา...</span>
-                    </span>
-                </button>
-            </div>
+          <div className={`${styles.col2} ${styles.alignEnd} ${styles.stickySearch}`}>
+            <button
+              id="searchBtn"
+              className={`${styles.btn} ${styles.btnPrimary} ${styles.btnFixed}`}
+              onClick={() => fetchHistory(1)}
+              disabled={loading}
+              title="กดเพื่อค้นหาประวัติ"
+              aria-label="ค้นหา"
+              aria-busy={loading ? 'true' : 'false'}
+            >
+              <span className={styles.btnLabel} data-loading={loading ? '1' : '0'}>
+                <span className={styles.labelIdle}>ค้นหา</span>
+                <span className={styles.labelBusy}>กำลังค้นหา...</span>
+              </span>
+            </button>
+          </div>
         </div>
         {error && <div role="alert" className={styles.errorText}>{error}</div>}
       </motion.div>
 
-      {/* List + select case */}
+      {/* Selector + List */}
       <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show">
+        {/* --- Custom Dropdown: แสดงอาการเป็นชิป + badge ฟ้า --- */}
         <div className={styles.row}>
           <div className={styles.col12}>
-            <label className={styles.label} htmlFor="caseSelect">เลือกเคส</label>
-            <select
-              id="caseSelect"
-              name="case_id"
-              className={styles.field}
+            <CaseDropdown
+              items={list?.data ?? []}
               value={selected}
-              onChange={(e) => pickCase(e.target.value)}
-              aria-label="เลือกเคสจากรายการ"
-              title="เลือกเคสจากรายการ"
-            >
-              <option value="">— เลือกเคส —</option>
-              {list?.data?.map((row) => (
-                <option key={row.case_id} value={row.case_id}>
-                  {fmt(row.created_at)} • {guessLiteTitle(row)}
-                </option>
-              ))}
-            </select>
+              onChange={(v) => pickCase(v)}
+            />
             {!list?.data?.length && (
-              <div className={styles.muted} id="emptyListMsg">
-                ยังไม่มีรายการ (กรุณาค้นหาก่อน)
-              </div>
+              <div className={styles.muted} id="emptyListMsg">ยังไม่มีรายการ (กรุณาค้นหาก่อน)</div>
             )}
           </div>
         </div>
-      </motion.div>
 
-      {/* ตารางสรุป */}
-      <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show">
+        {/* --- ตาราง --- */}
         <div className={styles.tableWrap}>
-          <table className={styles.table} aria-label="ตารางประวัติผู้ป่วย">
-            <thead>
-              <tr>
-                <th className={styles.colNo}>ลำดับ</th>
-                <th>วันที่/เวลา</th>
-                <th>ชื่อ-นามสกุล</th>
-                <th>โรค/อาการหลัก</th>
-                <th>คลินิก</th>
-              </tr>
-            </thead>
-            <tbody>
-              <AnimatePresence initial={false}>
-                {list?.data?.length ? (
-                  list.data.map((row, i) => (
-                    <motion.tr
-                      key={row.case_id}
-                      custom={i}
-                      variants={rowVar}
-                      initial="hidden"
-                      animate="show"
-                      exit={{ opacity: 0 }}
-                    >
-                      <td>{i + 1}</td>
-                      <td>{fmt(row.created_at)}</td>
-                      <td>{row.name}</td>
-                      <td>{guessLiteTitle(row)}</td>
-                      <td>{clinicText(row.summary_clinics) || "—"}</td>
-                    </motion.tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={5} className={styles.tableEmpty}>
-                      ไม่มีข้อมูล — กรอก CID แล้วกดค้นหา
-                    </td>
-                  </tr>
-                )}
-              </AnimatePresence>
-            </tbody>
-          </table>
+          {loading ? (
+            <LoadingSpinner message="กำลังค้นหาประวัติ..." size={48} />
+          ) : (
+            <table className={styles.table} aria-label="ตารางประวัติผู้ป่วย">
+              <thead>
+                <tr>
+                  <th className={styles.colNo}>ลำดับ</th>
+                  <th>วันที่/เวลา</th>
+                  <th>ชื่อ-นามสกุล</th>
+                  <th>อาการ (ทั้งหมด)</th>
+                  <th>คลินิก (ทั้งหมด)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <AnimatePresence initial={false}>
+                  {list?.data?.length ? (
+                    list.data.map((row, i) => {
+                      const isActive = selected === row.case_id;
+                      return (
+                        <motion.tr
+                          key={row.case_id}
+                          custom={i}
+                          variants={rowVar}
+                          initial="hidden"
+                          animate="show"
+                          exit={{ opacity: 0 }}
+                          className={isActive ? styles.activeRow : undefined}
+                        >
+                          <td>{i + 1}</td>
+                          <td>{fmt(row.created_at)}</td>
+                          <td>{row.name}</td>
+                          <td title={filterSymptoms(row.symptoms).join(', ')}>
+                            {formatSymptoms(row.symptoms)}
+                          </td>
+                          <td>{clinicTextAll(row.summary_clinics) || '—'}</td>
+                        </motion.tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={5} className={styles.tableEmpty}>ไม่มีข้อมูล — กรอก CID แล้วกดค้นหา</td>
+                    </tr>
+                  )}
+                </AnimatePresence>
+              </tbody>
+            </table>
+          )}
         </div>
 
-        {(list?.meta?.last_page ?? 1) > 1 && (
+        {/* --- Pager --- */}
+        {(list?.meta?.last_page ?? 1) > 1 && !loading && (
           <div className={styles.pagination} role="navigation" aria-label="เปลี่ยนหน้า">
             {Array.from({ length: list?.meta?.last_page ?? 1 }).map((_, idx) => {
-              const active = (list?.meta?.current_page ?? 1) === (idx + 1);
+              const active = (list?.meta?.current_page ?? 1) === idx + 1;
               return (
                 <button
                   key={idx}
-                  className={[
-                    styles.btn,
-                    styles.pageBtn,
-                    active ? styles.pageBtnActive : "",
-                  ].join(" ")}
+                  className={[styles.btn, styles.pageBtn, active ? styles.pageBtnActive : ''].join(' ')}
                   onClick={() => fetchHistory(idx + 1)}
                   title={`ไปหน้าที่ ${idx + 1}`}
                   aria-label={`ไปหน้าที่ ${idx + 1}`}
@@ -414,20 +619,28 @@ export default function PatientHistory() {
         )}
       </motion.div>
 
-      {/* สรุปผู้ป่วย + เวลาคัดกรองแรก + รายละเอียดการประเมิน */}
+     {/* รายละเอียดเคส */}
       <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show" aria-live="polite">
         <div className={styles.sectionTitle}>รายละเอียดเคสที่เลือก</div>
-        {!selected && <div className={styles.muted}>ยังไม่ได้เลือกเคส</div>}
-        {detailLoading && <div className={styles.muted}>กำลังโหลดรายละเอียด…</div>}
 
-        {detail && (
+        {!selected && !detailLoading && <div className={styles.muted}>ยังไม่ได้เลือกเคส</div>}
+
+        {detailLoading && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px' }}>
+            <LoadingSpinner message="กำลังโหลดรายละเอียดเคส..." size={44} />
+          </div>
+        )}
+
+        {detail && !detailLoading && (
           <>
+            {/* key–value 2 คอลัมน์ */}
             <div className={styles.grid2}>
-              <div><b>ชื่อ:</b> {detail.name}</div>
-              <div><b>CID:</b> {detail.cid}</div>
-              <div><b>อายุ/เพศ:</b> {detail.age} / {displayGender(detail.gender)}</div>
-              <div><b>สิทธิ/รพ.หลัก:</b> {detail.maininscl_name || "—"} / {detail.hmain_name || "—"}</div>
-              <div><b>เวลาสร้างเคส:</b> {fmt(detail.created_at)}</div>
+              <div>ชื่อ</div><div>{detail.name}</div>
+              <div>CID</div><div>{detail.cid}</div>
+              <div>อายุ/เพศ</div><div>{detail.age} / {displayGender(detail.gender)}</div>
+              <div>สิทธิ/รพ.หลัก</div>
+              <div>{detail.maininscl_name || '—'} / {detail.hmain_name || '—'}</div>
+              <div>เวลาสร้างเคส</div><div>{fmt(detail.created_at)}</div>
             </div>
 
             <div className={styles.blockTop}>
@@ -438,34 +651,58 @@ export default function PatientHistory() {
             <motion.hr className={styles.hr} variants={dividerVar} initial="hidden" animate="show" />
 
             <div className={styles.blockTop}>
-              <div className={styles.sectionTitle}>รายละเอียดการประเมิน ({detail.question_results.length})</div>
+              <div className={styles.sectionTitle}>
+                รายละเอียดการประเมิน ({detail.question_results.length})
+              </div>
 
-              <AnimatePresence initial={false}>
-                {detail.question_results.map((qr, i) => (
-                  <motion.div
-                    key={i}
-                    className={styles.qrItem}
-                    custom={i}
-                    variants={rowVar}
-                    initial="hidden"
-                    animate="show"
-                    exit={{ opacity: 0 }}
-                  >
-                    <div><b>{qr.question_title || qr.question}</b></div>
-                    <div className={styles.muted}>
-                      {fmt(qr.created_at)} • {qr.type.toUpperCase()} {qr.is_refer_case ? "• REFER" : ""}
-                    </div>
-                    <div>
-                      <b>คลินิก:</b>{" "}
-                      {(Array.isArray(qr.clinic) ? qr.clinic : [])
-                        .map((c) => clinicLabelMap[c] || c)
-                        .join(", ") || "—"}
-                      {qr.symptoms?.length ? <> • <b>อาการ:</b> {qr.symptoms.join(", ")}</> : null}
-                      {qr.note ? <> • <b>หมายเหตุ:</b> {qr.note}</> : null}
-                    </div>
-                  </motion.div>
-                ))}
-              </AnimatePresence>
+              <div className={styles.qrList}>
+                <AnimatePresence initial={false}>
+                  {detail.question_results.map((qr, i) => {
+                    const clinics = Array.isArray(qr.clinic) ? qr.clinic : [];
+                    const clinicLabels = clinics.map(c => clinicLabelMap[c] || c);
+
+                    return (
+                      <motion.div
+                        key={i}
+                        className={styles.qrItem}
+                        custom={i}
+                        variants={rowVar}
+                        initial="hidden"
+                        animate="show"
+                        exit={{ opacity: 0 }}
+                      >
+                        {/* แถวบน: เลขลำดับ + ชื่อเรื่อง + ป้าย */}
+                        <div className={styles.qrRowTop}>
+                          <div className={styles.qrIndex}>{i + 1}</div>
+
+                          <div className={styles.qrTitle}>
+                            {qr.question_title || qr.question}
+                          </div>
+
+                          <div className={styles.qrBadges}>
+                            {qr.is_refer_case && (
+                              <span className={`${styles.qrBadge} ${styles.qrBadgeRefer}`}>REFER</span>
+                            )}
+                            <span className={`${styles.qrBadge} ${styles.qrBadgeType}`}>
+                              {(qr.type || 'FORM').toUpperCase()}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* เวลา */}
+                        <div className={styles.qrMeta}>{fmt(qr.created_at)}</div>
+
+                        {/* เนื้อหา: คลินิก / อาการ / หมายเหตุ */}
+                        <div className={styles.qrDetail}>
+                          <b>คลินิก:</b> {clinicLabels.join(', ') || '—'}
+                          {qr.symptoms?.length ? <> • <b>อาการ:</b> {qr.symptoms.join(', ')}</> : null}
+                          {qr.note ? <> • <b>หมายเหตุ:</b> {qr.note}</> : null}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
+                </AnimatePresence>
+              </div>
             </div>
           </>
         )}

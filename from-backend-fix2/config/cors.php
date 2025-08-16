@@ -1,16 +1,15 @@
 <?php
-$origins = array_values(array_filter(array_map('trim', explode(',', env('FRONT_ORIGINS', '')))));
+$origins = collect(explode(',', env('FRONT_ORIGINS', '')))
+    ->map(fn ($o) => rtrim(trim($o), '/'))  // กันสแลชท้าย
+    ->filter()->values()->all();
 
 return [
-    'paths' => ['api/*', 'sanctum/csrf-cookie'],
+    'paths' => ['api/*'], // หรือ ['api/*','sanctum/csrf-cookie'] ถ้าคงไว้
     'allowed_methods' => ['*'],
-    'allowed_origins' => $origins,     // ต้องระบุเป็น origin จริง ๆ เมื่อใช้ credentials
+    'allowed_origins' => $origins,
     'allowed_origins_patterns' => [],
     'allowed_headers' => ['*'],
     'exposed_headers' => [],
     'max_age' => 0,
-
-    // ถ้าใช้ Bearer token ไม่พึ่งคุกกี้ -> false (แนะนำ ลดความยุ่ง CORS)
-    // ถ้าใช้คุกกี้/เซสชัน -> true และต้องตั้ง SANCTUM + SESSION ตามด้านบนให้ครบ
-    'supports_credentials' => false,
+    'supports_credentials' => false, // ใช้ Bearer token
 ];

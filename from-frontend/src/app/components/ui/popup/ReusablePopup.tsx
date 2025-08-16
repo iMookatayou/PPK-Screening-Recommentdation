@@ -105,7 +105,7 @@ export default function ReusablePopup({
                   ป๊อปอัพจะปิดอัตโนมัติใน {seconds} วินาที
                   <div className="mt-1 h-1 w-full bg-gray-200 rounded">
                     <div
-                      className="h-1 bg-gray-500 rounded"
+                      className="h-1 bg-gray-500 rounded" 
                       style={{
                         width: `${100 - (remain! / (autoCloseMs as number)) * 100}%`,
                         transition: 'width 0.2s linear',

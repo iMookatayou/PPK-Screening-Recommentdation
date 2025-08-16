@@ -1,14 +1,34 @@
-#!/bin/sh
+#!/usr/bin/env bash
 set -e
 
-# Wait for the database to be ready
-until php artisan migrate:status > /dev/null 2>&1; do
-  echo "Waiting for database connection..."
-  sleep 3
+echo "[backend] waiting for DB ..."
+# รอ DB ด้วย mysql-client
+until mysqladmin ping -h"${DB_HOST:-db}" -u"${DB_USERNAME:-root}" -p"${DB_PASSWORD:-root}" --silent; do
+  sleep 2
 done
+echo "[backend] DB is up"
 
-# Run migrations
+# เตรียมโปรเจกต์
+if [ ! -f .env ]; then
+  cp .env.example .env || true
+fi
+
+# ติดตั้ง dependency (ถ้า vendor หาย)
+if [ ! -d vendor ]; then
+  composer install
+fi
+
+php artisan key:generate || true
+chmod -R 777 storage bootstrap/cache
+
+# รัน migration + seeder
 php artisan migrate --force
+# ถ้าระบุ SEED_CLASS จะ seed class นั้นเพิ่ม, ไม่งั้นรัน DatabaseSeeder ปกติ
+if [ -n "$SEED_CLASS" ]; then
+  php artisan db:seed --force --class="$SEED_CLASS"
+else
+  php artisan db:seed --force
+fi
 
-# Start PHP-FPM
-exec php-fpm
+# รัน dev server (HTTP) ที่พอร์ต 9001
+exec php artisan serve --host=0.0.0.0 --port=9001

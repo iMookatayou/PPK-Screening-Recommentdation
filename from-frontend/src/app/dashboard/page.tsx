@@ -366,8 +366,8 @@ export default function ReferralStatsDashboardPage() {
     return (
       <div className={styles.tooltipBox}>
         <div><strong>{label}</strong></div>
-        {showGuide && <div>ระบบแนะนำ: <b>{Number(guide).toLocaleString()}</b></div>}
-        {showForm  && <div>ระบบคัดกรอง: <b>{Number(form).toLocaleString()}</b></div>}
+        {showGuide && <div>คัดกรองแนะนำ: <b>{Number(guide).toLocaleString()}</b></div>}
+        {showForm  && <div>คัดกรองเคสจริง: <b>{Number(form).toLocaleString()}</b></div>}
         {(showGuide && showForm) && <div className={styles.tooltipDivider} />}
         {(showGuide && showForm) && (
           <div>รวม: <b>{(Number(guide) + Number(form)).toLocaleString()}</b></div>
@@ -384,7 +384,7 @@ export default function ReferralStatsDashboardPage() {
       <main className={styles.mainContent}>
         {/* Title */}
         <div className={styles.header}>
-          <h1 className={styles.title}>ยอดรวมกันคัดกรองโรค - Total disease screening</h1>
+          <h1 className={styles.title}>Total disease screening - ยอดรวมกันคัดกรองโรค</h1>
           <div className={styles.actions}></div>
         </div>
 
@@ -416,7 +416,7 @@ export default function ReferralStatsDashboardPage() {
               className={sourceMode === "guide" ? styles.btnSelected : styles.btnChoice}
               onClick={() => setSourceMode("guide")}
             >
-              ระบบแนะนำ
+              คัดกรองแนะนำ
             </button>
             <button
               type="button"
@@ -424,7 +424,7 @@ export default function ReferralStatsDashboardPage() {
               className={sourceMode === "form" ? styles.btnSelected : styles.btnChoice}
               onClick={() => setSourceMode("form")}
             >
-              ระบบคัดกรอง
+              คัดกรองเคสจริง
             </button>
             <button
               type="button"
@@ -493,12 +493,12 @@ export default function ReferralStatsDashboardPage() {
           <div className={styles.totalsBox}>
             {(sourceMode === "guide" || sourceMode === "both") && (
               <div className={styles.totalItem}>
-                <span>ระบบแนะนำ</span><b>{totals.guide.toLocaleString()}</b>
+                <span>คัดกรองแนะนำ</span><b>{totals.guide.toLocaleString()}</b>
               </div>
             )}
             {(sourceMode === "form" || sourceMode === "both") && hasForm && (
               <div className={styles.totalItem}>
-                <span>ระบบคัดกรอง</span><b>{totals.form.toLocaleString()}</b>
+                <span>คัดกรองเคสจริง</span><b>{totals.form.toLocaleString()}</b>
               </div>
             )}
             {sourceMode === "both" && (
@@ -563,8 +563,8 @@ export default function ReferralStatsDashboardPage() {
                 <thead>
                   <tr>
                     <th>อาการ ({labels.length})</th>
-                    {(sourceMode === "guide" || sourceMode === "both") && <th>ระบบแนะนำ</th>}
-                    {(sourceMode === "form"  || sourceMode === "both") && <th>ระบบคัดกรอง</th>}
+                    {(sourceMode === "guide" || sourceMode === "both") && <th>คัดกรองแนะนำ</th>}
+                    {(sourceMode === "form"  || sourceMode === "both") && <th>คัดกรองเคสจริง</th>}
                     {sourceMode === "both" && <th>รวม</th>}
                   </tr>
                 </thead>
