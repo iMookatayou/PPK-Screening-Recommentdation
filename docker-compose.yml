@@ -1,34 +1,18 @@
+# docker-compose.yml (ไม่ใส่ version เพื่อเลี่ยงคำเตือน)
 services:
-  db:
-    image: mysql:8.0
-    container_name: db
-    restart: unless-stopped
-    env_file:
-      - ./from-backend-fix2/.env
-    ports:
-      - "3307:3306"
-    volumes:
-      - db_data:/var/lib/mysql
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping --protocol=tcp -h 127.0.0.1 -u root -p$MYSQL_ROOT_PASSWORD >/dev/null 2>&1 || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-    networks: [app-network]
-
   backend:
     build:
       context: ./from-backend-fix2
       dockerfile: Dockerfile
     container_name: backend
-    depends_on:
-      db:
-        condition: service_healthy
     ports:
-      - "9001:9001"
-    env_file:
-      - ./from-backend-fix2/.env
-    # ✅ จบที่ compose: dump-autoload ให้เห็น seeders ก่อนเข้า entrypoint เดิม
+      - "${BACKEND_HOST_PORT}:${APP_PORT}"
+    env_file: [ ./.env ]
+    environment:
+      RUN_MIGRATIONS: "${RUN_MIGRATIONS:-1}"
+      RUN_SEEDER: "${RUN_SEEDER:-1}"
+      TZ: ${TZ:-Asia/Bangkok}
+    # อุ่นใจ: dump-autoload ก่อนเข้า entrypoint (กันกรณี seeder ยังไม่ถูก autoload)
     entrypoint:
       - /bin/sh
       - -lc
@@ -44,33 +28,33 @@ services:
       context: ./from-frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_USE_MOCK: "false"
-        NEXT_PUBLIC_API_BASE_URL: "http://192.168.1.113:9001"
-        NEXT_PUBLIC_BASE_URL: "http://192.168.1.113:9001"
-        NEXT_PUBLIC_CARD_API: "http://localhost:5000"
-        NEXT_PUBLIC_PPK11_API: "http://172.16.78.22/ppk11"
-        NEXT_PUBLIC_FORM_API: "http://172.16.78.22/nhso/api"
+        NEXT_PUBLIC_USE_MOCK: "${NEXT_PUBLIC_USE_MOCK}"
+        NEXT_PUBLIC_API_BASE_URL: "${BACKEND_URL}"
+        NEXT_PUBLIC_BASE_URL: "${BACKEND_URL}"
+        NEXT_PUBLIC_CARD_API: "${NEXT_PUBLIC_CARD_API}"
+        NEXT_PUBLIC_PPK11_API: "${NEXT_PUBLIC_PPK11_API}"
+        NEXT_PUBLIC_FORM_API: "${NEXT_PUBLIC_FORM_API}"
     container_name: frontend
     depends_on: [backend]
     ports:
-      - "3000:3000"
+      - "${FRONTEND_HOST_PORT}:${FRONTEND_PORT}"
     environment:
-      TZ: Asia/Bangkok
-      PORT: "3000"
+      TZ: ${TZ:-Asia/Bangkok}
+      PORT: "${FRONTEND_PORT}"
     networks: [app-network]
 
+  # (ตัวเลือก) phpMyAdmin ต่อกับ MySQL บนเครื่องคุณ
   phpmyadmin:
     image: phpmyadmin
     container_name: pma
-    env_file:
-      - ./from-backend-fix2/.env
+    env_file: [ ./.env ]
+    environment:
+      PMA_HOST: "host.docker.internal"
+      PMA_PORT: "${DB_PORT}"
+      PMA_ARBITRARY: "1"
     ports:
-      - "8081:80"
-    depends_on: [db]
+      - "${PMA_HOST_PORT}:80"
     networks: [app-network]
-
-volumes:
-  db_data:
 
 networks:
   app-network:
