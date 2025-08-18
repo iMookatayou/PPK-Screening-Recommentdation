@@ -1,22 +1,41 @@
-node_modules
-.next
-npm-debug.log
-yarn-error.log
-dist
+# ===== Node / Next.js artifacts =====
+node_modules/
+.next/
+out/
+dist/
+coverage/
+.turbo/
+.vercel/
+.eslintcache
+.cache/
+*.tsbuildinfo
+
+# ===== Logs =====
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+*.log
+
+# ===== OS / Editor =====
 .DS_Store
-.env
-.env.*
-.git
-.gitignore
-.vscode
-*.local
-coverage
 *.swp
 *.swo
-*.log
-*.tsbuildinfo
+.vscode/
+.idea/
+
+# ===== Archives =====
 *.tgz
-*.lock
-*.md
-Dockerfile
-README.md
+
+# ===== Git =====
+.git/
+.gitignore
+
+# ===== Env files =====
+# บล็อคทุก env ยกเว้น .env.production (ถ้าคุณตั้งใจจะ bake ค่านี้)
+.env
+.env.local
+.env.development
+.env.test
+.env.*.local
+!.env.production

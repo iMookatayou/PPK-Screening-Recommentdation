@@ -22,3 +22,6 @@
 Homestead.json
 Homestead.yaml
 Thumbs.db
+
+# เพิ่มบรรทัดนี้เพื่อให้ docker/entrypoint.sh ถูก copy เข้า image
+!docker/**

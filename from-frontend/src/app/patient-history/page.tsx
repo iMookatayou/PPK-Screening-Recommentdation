@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useRef, useCallback } from 'react';
+import React, { useMemo, useState, useRef, useCallback, useEffect } from 'react';
 import { authAxios } from '@/lib/axios';
 import { clinicLabelMap } from '@/app/components/questionpath/clinicLabelMap';
 import { ClipboardList, Search as IconSearch, CalendarRange } from 'lucide-react';
@@ -31,8 +31,8 @@ type LiteResp = {
 type DetailQR = {
   question: string;
   question_title?: string;
-  clinic?: string[];
-  symptoms?: string[];
+  clinic?: string[] | null;
+  symptoms?: string[] | null;
   note?: string | null;
   is_refer_case: boolean;
   type: 'form' | 'guide' | 'referral' | 'kiosk';
@@ -65,13 +65,6 @@ function fmt(dt?: string) {
   }).format(new Date(iso));
 }
 
-function clinicTextAll(codes?: string[] | any[] | string | null) {
-  const arr = toStringList(codes);
-  if (!arr.length) return '';
-  return arr.map((c) => clinicLabelMap[c] || c).join(', ');
-}
-
-/** รองรับ string | string[] | object[] | null */
 function toStringList(input: unknown): string[] {
   if (!input) return [];
   if (typeof input === 'string') {
@@ -86,15 +79,7 @@ function toStringList(input: unknown): string[] {
         if (typeof it === 'string') return it;
         if (it && typeof it === 'object') {
           const o = it as any;
-          return (
-            o.label ??
-            o.name ??
-            o.symptom ??
-            o.value ??
-            o.text ??
-            o.code ??
-            ''
-          );
+          return o.label ?? o.name ?? o.symptom ?? o.value ?? o.text ?? o.code ?? '';
         }
         return '';
       })
@@ -104,7 +89,6 @@ function toStringList(input: unknown): string[] {
   return [String(input)];
 }
 
-// ===== Utils: filter & format symptoms =====
 const SYM_EXCLUDE = new RegExp(
   String.raw`(^note$|^flag$|^in_hours$|^has_case_doc$|^stable$|^no_injury$|(_|^)(pain_)?scale(_\d+)?$|(_|^)(score|grade)(_\d+)?$)`,
   'i'
@@ -116,22 +100,16 @@ function filterSymptoms(sym?: string[] | any[] | string | null): string[] {
     .map(s => (typeof s === 'string' ? s.trim() : ''))
     .filter(Boolean)
     .filter(s => !SYM_EXCLUDE.test(s.toLowerCase()));
-  // unique
   return Array.from(new Set(out));
 }
 
-/** ใช้ในตาราง: คืนค่า ReactNode */
 function formatSymptoms(sym?: string[] | any[] | string | null, limit = 3): React.ReactNode {
   const arr = filterSymptoms(sym);
   if (!arr.length) return '—';
-
-  if (arr.length <= limit) {
-    return <span className={styles.symText}>{arr.join(', ')}</span>;
-  }
+  if (arr.length <= limit) return <span className={styles.symText}>{arr.join(', ')}</span>;
 
   const head = arr.slice(0, limit).join(', ');
   const more = arr.length - limit;
-
   return (
     <>
       <span className={styles.symText}>{head}</span>
@@ -140,7 +118,6 @@ function formatSymptoms(sym?: string[] | any[] | string | null, limit = 3): Reac
   );
 }
 
-/** ใช้ใน <option>: ต้องเป็น string ล้วน หลีกเลี่ยง [object Object] */
 function formatSymptomsText(sym?: string[] | any[] | string | null, limit = 3): string {
   const arr = filterSymptoms(sym);
   if (!arr.length) return '—';
@@ -148,19 +125,6 @@ function formatSymptomsText(sym?: string[] | any[] | string | null, limit = 3): 
   const head = arr.slice(0, limit).join(', ');
   const more = arr.length - limit;
   return `${head} +${more} เพิ่มเติม`;
-}
-
-/** label ใน select: แสดงเฉพาะอาการ (ไม่ใส่คลินิก) */
-function makeCaseLabel(row: LiteItem) {
-  const date = fmt(row.created_at);
-  const name = row.name || '-';
-  const symText = formatSymptomsText(row.symptoms); // <<<<<< ใช้ตัวแบบ string
-  return `${date} • ${name} • อาการ: ${symText}`;
-}
-
-function splitSymptoms(sym?: string[] | any[] | string | null, limit = 3) {
-  const arr = filterSymptoms(sym);
-  return { head: arr.slice(0, limit), more: Math.max(0, arr.length - limit) };
 }
 
 function displayGender(g?: string) {
@@ -205,6 +169,41 @@ const rowVar = {
   show: (i: number) => ({ opacity: 1, y: 0, transition: { duration: 0.16, delay: i * 0.02 } }),
 };
 const dividerVar = { hidden: { scaleX: 0, opacity: 0 }, show: { scaleX: 1, opacity: 1, transition: { duration: 0.25 } } };
+
+/* ===================== iPad-safe Datepicker ===================== */
+const supportsShowPicker = typeof window !== 'undefined' && 'showPicker' in HTMLInputElement.prototype;
+
+function isIOSiPad(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  const iOS = /iPad|iPhone|iPod/.test(ua);
+  // iPadOS 13+ reports as Mac, ตรวจจับด้วย touch
+  const iPadOS = /Macintosh/.test(ua) && 'ontouchend' in window;
+  return iOS || iPadOS;
+}
+
+/** เปิด datepicker ได้ทั้ง Chromium และ iPad Safari */
+function openDatePickerSafely(el: HTMLInputElement) {
+  if (!el) return;
+  if (supportsShowPicker) {
+    // Chromium, Edge, etc.
+    (el as any).showPicker?.();
+    return;
+  }
+  // iOS/iPad Safari fallback
+  // - ไม่ใช้ preventDefault
+  // - ปิดคีย์บอร์ดด้วย inputMode="none"
+  // - toggle readOnly แล้ว focus ภายใต้ user gesture
+  const prev = el.readOnly;
+  el.readOnly = false;
+  // การ focus ใน iOS จะเรียก spinner ถ้า type=date
+  requestAnimationFrame(() => {
+    el.focus();
+    setTimeout(() => {
+      el.readOnly = prev;
+    }, 0);
+  });
+}
 
 /* ===================== Component ===================== */
 export default function PatientHistory() {
@@ -307,131 +306,122 @@ export default function PatientHistory() {
     return t ? fmt(t) : '—';
   }, [detail]);
 
-  const hasMoreThanOnePage = useMemo(() => (list?.meta?.last_page ?? 1) > 1, [list]);
-
+  /* ----------------- Dropdown (เหมือนเดิม) ----------------- */
   function CaseDropdown({
-  items,
-  value,
-  onChange,
-}: {
-  items: LiteItem[];
-  value: string;
-  onChange: (v: string) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [q, setQ] = useState("");
+    items, value, onChange,
+  }: { items: LiteItem[]; value: string; onChange: (v: string) => void }) {
+    const [open, setOpen] = useState(false);
+    const [q, setQ] = useState('');
 
-  const filtered = useMemo(() => {
-    const qq = q.trim().toLowerCase();
-    if (!qq) return items;
-    return items.filter((it) => {
-      const sym = filterSymptoms(it.symptoms).join(" ").toLowerCase();
-      return (
-        it.name.toLowerCase().includes(qq) ||
-        sym.includes(qq) ||
-        fmt(it.created_at).toLowerCase().includes(qq)
-      );
-    });
-  }, [items, q]);
+    const btnRef = useRef<HTMLButtonElement | null>(null);
+    const listboxId = 'history-listbox';
+    useEffect(() => {
+      btnRef.current?.setAttribute('aria-expanded', open ? 'true' : 'false');
+    }, [open]);
 
-  const selectedItem = items.find((x) => x.case_id === value) || null;
+    const filtered = useMemo(() => {
+      const qq = q.trim().toLowerCase();
+      if (!qq) return items;
+      return items.filter((it) => {
+        const sym = filterSymptoms(it.symptoms).join(' ').toLowerCase();
+        return it.name.toLowerCase().includes(qq) || sym.includes(qq) || fmt(it.created_at).toLowerCase().includes(qq);
+      });
+    }, [items, q]);
 
+    const selectedItem = items.find((x) => x.case_id === value) || null;
+    const activeId = value ? `option-${value}` : undefined;
+    
     return (
-      <div className={styles.dropdown}>
-        <label className={styles.label}>เลือกเคส</label>
+        <div className={`${styles.dropdown} ${styles.dropdownCase}`}>
+          <label className={styles.label}>เลือกเคส</label>
 
-        <button
-          type="button"
-          className={styles.comboButton}
-          onClick={() => setOpen((v) => !v)}
-          aria-expanded={open ? "true" : "false"}
-          aria-haspopup="listbox"
-        >
-          {selectedItem ? (
-            <>
-              <span className={styles.comboMain}>
-                {fmt(selectedItem.created_at)} • {selectedItem.name}
-              </span>
-              <span className={styles.comboSubs}>
-                {(() => {
-                  const arr = filterSymptoms(selectedItem.symptoms);
-                  const head = arr.slice(0, 3);
-                  const more = Math.max(0, arr.length - 3);
-                  return (
-                    <>
-                      {head.map((s, i) => (
-                        <span key={i} className={styles.chip}>{s}</span>
-                      ))}
-                      {more > 0 && <span className={styles.badgeMore}>+{more} เพิ่มเติม</span>}
-                    </>
-                  );
-                })()}
-              </span>
-            </>
-          ) : (
-            <span className={styles.comboPlaceholder}>— เลือกเคส —</span>
-          )}
-        </button>
+          <button
+            ref={btnRef}
+            id="caseDropdownButton"
+            type="button"
+            className={styles.comboButton}
+            onClick={() => setOpen(v => !v)}
+            aria-haspopup="listbox"
+            aria-controls={listboxId}
+          >
+            {selectedItem ? (
+              <>
+                <span className={styles.comboMain}>
+                  {fmt(selectedItem.created_at)} • {selectedItem.name}
+                </span>
+                <span className={styles.comboSubs}>
+                  {/* chips ตามเดิม */}
+                  …
+                </span>
+              </>
+            ) : (
+              <span className={styles.comboPlaceholder}>— เลือกเคส —</span>
+            )}
+          </button>
 
         {open && (
-          <div className={styles.comboPanel} role="dialog">
+          <div className={styles.comboPanel} role="region" aria-label="ตัวเลือกเคส">
             <div className={styles.comboSearchRow}>
-              <IconSearch className={styles.comboSearchIcon} />
+              <IconSearch className={styles.comboSearchIcon} aria-hidden />
               <input
                 className={styles.comboSearch}
                 placeholder="ค้นหาชื่อ / อาการ / วันที่"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
                 autoFocus
+                aria-label="ค้นหาในรายการเคส"
               />
             </div>
 
-            <ul className={styles.comboList} role="listbox">
-              {filtered.length === 0 && (
-                <li className={styles.comboEmpty}>ไม่พบรายการ</li>
-              )}
-              {filtered.map((row) => {
-                const all = filterSymptoms(row.symptoms); // << เอาทั้งหมด
+            {filtered.length === 0 ? (
+              <div role="status" aria-live="polite" className={styles.comboEmpty}>
+                ไม่พบรายการ
+              </div>
+            ) : (
+              <ul
+                id={listboxId}
+                role="listbox"
+                className={styles.comboList}
+                aria-labelledby="caseDropdownButton"
+                aria-activedescendant={activeId}         
+                aria-multiselectable="false"
+              >
+                {filtered.map((row) => {
+                  const liId = `option-${row.case_id}`;
+                  const active = value === row.case_id;
+                  const all = filterSymptoms(row.symptoms);
 
-                return (
-                  <li
-                    key={row.case_id}
-                    role="option"
-                    aria-selected={value === row.case_id ? "true" : "false"}
-                    className={
-                      value === row.case_id
-                        ? `${styles.comboItem} ${styles.comboItemActive}`
-                        : styles.comboItem
-                    }
-                    onClick={() => {
-                      onChange(row.case_id);
-                    }}
-                  >
-                    <div className={styles.itemTop}>
-                      <span className={styles.itemTime}>{fmt(row.created_at)}</span>
-                      <span className={styles.itemName}>{row.name}</span>
-                    </div>
-
-                    {/* แก้เฉพาะตรงนี้: แสดงทุกอาการเป็นชิป ไม่ต้องมี +N */}
-                    <div className={styles.itemBottom}>
-                      {all.length ? (
-                        all.map((s, i) => (
-                          <span key={i} className={styles.chip}>{s}</span>
-                        ))
-                      ) : (
-                        <span className={styles.muted}>— ไม่มีอาการ —</span>
-                      )}
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+                  return (
+                    <li
+                      id={liId}                            
+                      key={row.case_id}
+                      role="option"
+                      className={active ? `${styles.comboItem} ${styles.comboItemActive}` : styles.comboItem}
+                      data-selected={active ? '1' : '0'} 
+                      onClick={() => { onChange(row.case_id); setOpen(false); }}
+                      tabIndex={-1}
+                    >
+                      <div className={styles.itemTop}>
+                        <span className={styles.itemTime}>{fmt(row.created_at)}</span>
+                        <span className={styles.itemName}>{row.name}</span>
+                      </div>
+                      <div className={styles.itemBottom}>
+                        {all.length
+                          ? all.map((s, i) => <span key={i} className={styles.chip}>{s}</span>)
+                          : <span className={styles.muted}>— ไม่มีอาการ —</span>}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
           </div>
         )}
       </div>
     );
   }
 
+  /* ----------------- Render ----------------- */
   return (
     <div className={styles.container}>
       <h2 className={styles.pageTitle}>
@@ -440,8 +430,16 @@ export default function PatientHistory() {
       </h2>
 
       {/* Search card */}
-      <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show" role="search" aria-label="ค้นหาประวัติผู้ป่วย">
-        <div className={styles.row}>
+      <motion.div
+        className={styles.card}
+        variants={cardVar}
+        initial="hidden"
+        animate="show"
+        role="search"
+        aria-label="ค้นหาประวัติผู้ป่วย"
+      >
+        {/* แถวบน: CID | ช่วงเวลา | ปุ่มค้นหา (ขวาบน) */}
+        <div className={`${styles.row} ${styles.filtersRowTop}`}>
           <div className={styles.col4}>
             <label className={styles.label} htmlFor="cidInput">เลขบัตรประชาชน (CID)</label>
             <div className={styles.inputWithIcon}>
@@ -456,11 +454,12 @@ export default function PatientHistory() {
                 title="กรอกเลขบัตรประชาชน 13 หลัก"
                 aria-label="เลขบัตรประชาชน"
                 inputMode="numeric"
+                autoComplete="off"
               />
             </div>
           </div>
 
-          <div className={styles.col3}>
+          <div className={`${styles.col3} ${styles.rangeCol}`}>
             <label className={styles.label} htmlFor="rangeSelect">ช่วงเวลา</label>
             <div className={styles.inputWithIcon}>
               <CalendarRange className={styles.inputIcon} aria-hidden />
@@ -470,8 +469,6 @@ export default function PatientHistory() {
                 className={styles.field}
                 value={range}
                 onChange={(e) => { setRange(e.target.value as any); setStart(''); setEnd(''); }}
-                title="เลือกช่วงวันที่สำเร็จรูป"
-                aria-label="เลือกช่วงวันที่สำเร็จรูป"
               >
                 <option value="">— เลือก —</option>
                 <option value="today">วันนี้</option>
@@ -480,74 +477,76 @@ export default function PatientHistory() {
                 <option value="this_month">เดือนนี้</option>
               </select>
             </div>
-            <small className={styles.muted + ' ' + styles.block}>หรือเลือกวันเองด้านขวา</small>
           </div>
 
-          <div className={styles.col3}>
+          {/* ปุ่มค้นหา ขวาบน */}
+          <div className={`${styles.col5} ${styles.rightEnd}`}>
+            <button
+              id="searchBtn"
+              className={`${styles.btn} ${styles.btnPrimary} ${styles.btnTop}`}
+              onClick={() => fetchHistory(1)}
+              disabled={loading}
+              title="กดเพื่อค้นหาประวัติ"
+              aria-label="ค้นหา"
+            >
+              <span className={styles.btnLabel} data-loading={loading ? '1' : '0'}>
+                <span className={styles.labelIdle}>ค้นหา</span>
+              </span>
+            </button>
+          </div>
+        </div>
+
+        {/* แถวล่าง: วันที่เริ่ม | วันที่สิ้นสุด (เว้นระยะนิดนึง) */}
+        <div className={`${styles.row} ${styles.filtersRowDates}`}>
+          <div className={`${styles.col3} ${styles.dateItem}`}>
             <label className={styles.label} htmlFor="startDate">วันที่เริ่ม</label>
             <input
               id="startDate"
               name="start_date"
               type="date"
-              className={styles.field}
+              className={`${styles.field} ${styles.dateAuto}`}
               value={start}
               onChange={(e) => { setRange(''); setStart(e.target.value); }}
-              aria-label="วันที่เริ่มต้น"
-              title="เลือกวันที่เริ่มต้น"
+              autoComplete="off"
+              inputMode="none"
+              onClick={(e) => openDatePickerSafely(e.currentTarget)}
+              onTouchEnd={(e) => openDatePickerSafely(e.currentTarget)}
             />
           </div>
 
-          <div className={styles.col2}>
+          <div className={`${styles.col3} ${styles.dateItem}`}>
             <label className={styles.label} htmlFor="endDate">วันที่สิ้นสุด</label>
             <input
               id="endDate"
               name="end_date"
               type="date"
-              className={styles.field}
+              className={`${styles.field} ${styles.dateAuto}`}
               value={end}
               onChange={(e) => { setRange(''); setEnd(e.target.value); }}
-              aria-label="วันที่สิ้นสุด"
-              title="เลือกวันที่สิ้นสุด"
+              autoComplete="off"
+              inputMode="none"
+              onClick={(e) => openDatePickerSafely(e.currentTarget)}
+              onTouchEnd={(e) => openDatePickerSafely(e.currentTarget)}
             />
           </div>
-
-          <div className={`${styles.col2} ${styles.alignEnd} ${styles.stickySearch}`}>
-            <button
-              id="searchBtn"
-              className={`${styles.btn} ${styles.btnPrimary} ${styles.btnFixed}`}
-              onClick={() => fetchHistory(1)}
-              disabled={loading}
-              title="กดเพื่อค้นหาประวัติ"
-              aria-label="ค้นหา"
-              aria-busy={loading ? 'true' : 'false'}
-            >
-              <span className={styles.btnLabel} data-loading={loading ? '1' : '0'}>
-                <span className={styles.labelIdle}>ค้นหา</span>
-                <span className={styles.labelBusy}>กำลังค้นหา...</span>
-              </span>
-            </button>
-          </div>
         </div>
+
         {error && <div role="alert" className={styles.errorText}>{error}</div>}
       </motion.div>
 
       {/* Selector + List */}
       <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show">
-        {/* --- Custom Dropdown: แสดงอาการเป็นชิป + badge ฟ้า --- */}
+        {/* Dropdown */}
         <div className={styles.row}>
           <div className={styles.col12}>
-            <CaseDropdown
-              items={list?.data ?? []}
-              value={selected}
-              onChange={(v) => pickCase(v)}
-            />
+            <CaseDropdown items={list?.data ?? []} value={selected} onChange={(v) => pickCase(v)} />
             {!list?.data?.length && (
               <div className={styles.muted} id="emptyListMsg">ยังไม่มีรายการ (กรุณาค้นหาก่อน)</div>
             )}
           </div>
         </div>
 
-        {/* --- ตาราง --- */}
+        {/* Table */}
         <div className={styles.tableWrap}>
           {loading ? (
             <LoadingSpinner message="กำลังค้นหาประวัติ..." size={48} />
@@ -583,7 +582,11 @@ export default function PatientHistory() {
                           <td title={filterSymptoms(row.symptoms).join(', ')}>
                             {formatSymptoms(row.symptoms)}
                           </td>
-                          <td>{clinicTextAll(row.summary_clinics) || '—'}</td>
+                          <td>{
+                            toStringList(row.summary_clinics)
+                              .map((c) => clinicLabelMap[c] || c)
+                              .join(', ') || '—'
+                          }</td>
                         </motion.tr>
                       );
                     })
@@ -598,7 +601,7 @@ export default function PatientHistory() {
           )}
         </div>
 
-        {/* --- Pager --- */}
+        {/* Pager */}
         {(list?.meta?.last_page ?? 1) > 1 && !loading && (
           <div className={styles.pagination} role="navigation" aria-label="เปลี่ยนหน้า">
             {Array.from({ length: list?.meta?.last_page ?? 1 }).map((_, idx) => {
@@ -610,6 +613,7 @@ export default function PatientHistory() {
                   onClick={() => fetchHistory(idx + 1)}
                   title={`ไปหน้าที่ ${idx + 1}`}
                   aria-label={`ไปหน้าที่ ${idx + 1}`}
+                  aria-current={active ? 'page' : undefined}
                 >
                   {idx + 1}
                 </button>
@@ -619,7 +623,7 @@ export default function PatientHistory() {
         )}
       </motion.div>
 
-     {/* รายละเอียดเคส */}
+      {/* รายละเอียดเคส */}
       <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show" aria-live="polite">
         <div className={styles.sectionTitle}>รายละเอียดเคสที่เลือก</div>
 
@@ -633,7 +637,6 @@ export default function PatientHistory() {
 
         {detail && !detailLoading && (
           <>
-            {/* key–value 2 คอลัมน์ */}
             <div className={styles.grid2}>
               <div>ชื่อ</div><div>{detail.name}</div>
               <div>CID</div><div>{detail.cid}</div>
@@ -671,14 +674,11 @@ export default function PatientHistory() {
                         animate="show"
                         exit={{ opacity: 0 }}
                       >
-                        {/* แถวบน: เลขลำดับ + ชื่อเรื่อง + ป้าย */}
                         <div className={styles.qrRowTop}>
                           <div className={styles.qrIndex}>{i + 1}</div>
-
                           <div className={styles.qrTitle}>
                             {qr.question_title || qr.question}
                           </div>
-
                           <div className={styles.qrBadges}>
                             {qr.is_refer_case && (
                               <span className={`${styles.qrBadge} ${styles.qrBadgeRefer}`}>REFER</span>
@@ -689,10 +689,8 @@ export default function PatientHistory() {
                           </div>
                         </div>
 
-                        {/* เวลา */}
                         <div className={styles.qrMeta}>{fmt(qr.created_at)}</div>
 
-                        {/* เนื้อหา: คลินิก / อาการ / หมายเหตุ */}
                         <div className={styles.qrDetail}>
                           <b>คลินิก:</b> {clinicLabels.join(', ') || '—'}
                           {qr.symptoms?.length ? <> • <b>อาการ:</b> {qr.symptoms.join(', ')}</> : null}

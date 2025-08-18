@@ -257,3 +257,12 @@ html, body { min-height: 100%; }
 .portal-layer { position: absolute; z-index: var(--z-dropdown); }
 /* (ตัวเลือก) ถ้าต้องการให้ลอยเต็มหน้าจอ */
 .portal-layer-fixed { position: fixed; inset: 0 auto auto 0; z-index: var(--z-dropdown); }
+
+:root { color-scheme: light; }   /* กัน auto-invert */
+
+input[type="checkbox"],
+input[type="radio"]{
+  appearance: auto;              /* เผื่อเคย reset ไว้ */
+  -webkit-appearance: auto;
+  accent-color: #198754;         /* สีที่ต้องการ */
+}

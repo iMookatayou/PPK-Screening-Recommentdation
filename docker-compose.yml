@@ -1,22 +1,16 @@
-version: "3.8"
-
 services:
   db:
     image: mysql:8.0
     container_name: db
     restart: unless-stopped
-    environment:
-      MYSQL_DATABASE: laravel
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_USER: fenyb1
-      MYSQL_PASSWORD: 0959611859fenyb1
-      TZ: Asia/Bangkok
+    env_file:
+      - ./from-backend-fix2/.env
     ports:
-      - "3306:3306"
+      - "3307:3306"
     volumes:
       - db_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      test: ["CMD-SHELL", "mysqladmin ping --protocol=tcp -h 127.0.0.1 -u root -p$MYSQL_ROOT_PASSWORD >/dev/null 2>&1 || exit 1"]
       interval: 5s
       timeout: 3s
       retries: 30
@@ -31,32 +25,48 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "9001:9001"   # ← ใช้พอร์ตที่ต้องการ
-    volumes:
-      - ./from-backend-fix2:/app
+      - "9001:9001"
     env_file:
       - ./from-backend-fix2/.env
-    environment:
-      TZ: Asia/Bangkok
-      # (ทางเลือก) ระบุ seeder หลักที่อยากรัน (นอกเหนือจาก DatabaseSeeder)
-      # SEED_CLASS=AdminUserSeeder
+    # ✅ จบที่ compose: dump-autoload ให้เห็น seeders ก่อนเข้า entrypoint เดิม
+    entrypoint:
+      - /bin/sh
+      - -lc
+      - |
+        set -e
+        echo "[compose] composer dump-autoload -o ..."
+        composer dump-autoload -o || true
+        exec /usr/local/bin/entrypoint.sh
     networks: [app-network]
 
   frontend:
     build:
       context: ./from-frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_USE_MOCK: "false"
+        NEXT_PUBLIC_API_BASE_URL: "http://192.168.1.113:9001"
+        NEXT_PUBLIC_BASE_URL: "http://192.168.1.113:9001"
+        NEXT_PUBLIC_CARD_API: "http://localhost:5000"
+        NEXT_PUBLIC_PPK11_API: "http://172.16.78.22/ppk11"
+        NEXT_PUBLIC_FORM_API: "http://172.16.78.22/nhso/api"
     container_name: frontend
     depends_on: [backend]
     ports:
       - "3000:3000"
-    volumes:
-      - ./from-frontend:/app
-      - /app/node_modules
-    env_file:
-      - ./from-frontend/.env
     environment:
       TZ: Asia/Bangkok
+      PORT: "3000"
+    networks: [app-network]
+
+  phpmyadmin:
+    image: phpmyadmin
+    container_name: pma
+    env_file:
+      - ./from-backend-fix2/.env
+    ports:
+      - "8081:80"
+    depends_on: [db]
     networks: [app-network]
 
 volumes:

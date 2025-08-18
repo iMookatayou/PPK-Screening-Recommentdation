@@ -1,0 +1,83 @@
+# ===== Secrets & env =====
+.env
+.env.*
+!.env.example
+
+# ===== Git =====
+.git
+.git/*
+.github
+.gitattributes
+.gitignore
+
+# ===== Composer =====
+/vendor
+composer.phar
+
+# ===== Node (หากมีของติดมาปะปน) =====
+node_modules
+npm-debug.log*
+pnpm-debug.log*
+*.log
+
+# ===== IDE / Editor =====
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# ===== OS junk =====
+.DS_Store
+Thumbs.db
+
+# ===== Laravel runtime files =====
+/storage/logs/*
+/storage/app/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+
+# เก็บไฟล์ placeholder ของ git เอาไว้
+!/storage/.gitignore
+!/storage/app/.gitignore
+!/storage/logs/.gitignore
+!/storage/framework/.gitignore
+!/storage/framework/cache/.gitignore
+!/storage/framework/sessions/.gitignore
+!/storage/framework/views/.gitignore
+
+# ===== Bootstrap cache =====
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# ===== Public build/runtime =====
+/public/storage
+/public/hot
+/public/build
+/public/mix-manifest.json
+
+# ===== Tests & docs (ลดขนาด context) =====
+/tests
+phpunit.xml
+phpunit.xml.dist
+phpstan.neon*
+psalm.xml*
+/docs
+README.md
+
+# ===== Coverage / temp =====
+coverage
+.phpunit.result.cache
+.php-cs-fixer.cache
+*.cache
+/tmp
+/tmp/*
+*.sql
+*.sqlite
+*.sqlite-journal
+
+# ===== Keys / certs (กันเผลอ bake ลง image) =====
+*.pem
+*.key
+id_rsa*

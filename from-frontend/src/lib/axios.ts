@@ -6,17 +6,20 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios'
 
-// ---- Base URL (เติม /api ให้อัตโนมัติ) ----
-const rawBase = process.env.NEXT_PUBLIC_API_BASE_URL
-if (!rawBase) {
-  throw new Error('NEXT_PUBLIC_API_BASE_URL not defined in .env')
+/* ---------------- Base URL ----------------
+   - ไม่ throw ตอน import-time (กัน build ล้ม)
+   - ถ้าไม่ตั้ง NEXT_PUBLIC_API_BASE_URL → ใช้ '/api' เป็นค่า fallback
+   - auto เติม '/api' ให้เมื่อยังไม่มี
+------------------------------------------- */
+function resolveBaseURL(): string {
+  const raw = process.env.NEXT_PUBLIC_API_BASE_URL || '' // ไม่โยน error
+  const candidate = raw.trim() === '' ? '/api' : raw.trim()
+  const noTrail = candidate.replace(/\/+$/, '')
+  return noTrail.endsWith('/api') ? noTrail : `${noTrail}/api`
 }
-const baseURL = (() => {
-  const trimmed = rawBase.replace(/\/+$/, '')
-  return trimmed.endsWith('/api') ? trimmed : `${trimmed}/api`
-})()
+const baseURL = resolveBaseURL()
 
-// ---- Helpers ----
+/* --------------- Helpers --------------- */
 function ensureAxiosHeaders(config: InternalAxiosRequestConfig): AxiosHeaders {
   const h = config.headers
   if (!h) {
@@ -25,18 +28,15 @@ function ensureAxiosHeaders(config: InternalAxiosRequestConfig): AxiosHeaders {
     return ah
   }
   if (h instanceof AxiosHeaders) return h
-  const ah = AxiosHeaders.from(h) // แปลง plain object → AxiosHeaders
+  const ah = AxiosHeaders.from(h)
   config.headers = ah
   return ah
 }
 
 function setJsonHeaders(config: InternalAxiosRequestConfig) {
   const headers = ensureAxiosHeaders(config)
-
-  // อย่าทับ header ที่ caller ตั้งมาเอง
   if (!headers.has('Accept')) headers.set('Accept', 'application/json')
 
-  // ถ้าเป็น FormData → ปล่อยให้ browser ใส่ boundary เอง (ไม่เซ็ต Content-Type)
   const isForm =
     typeof FormData !== 'undefined' && config.data instanceof FormData
 
@@ -46,7 +46,6 @@ function setJsonHeaders(config: InternalAxiosRequestConfig) {
 }
 
 function normalizeAxiosError(error: AxiosError) {
-  // ไม่เปลี่ยน shape ของ error (เพื่อไม่กระทบ handler เดิม) — แค่ปรับ message ให้อ่านง่ายขึ้น
   if (error.code === 'ECONNABORTED') {
     error.message ||= 'คำขอหมดเวลา กรุณาลองใหม่'
   } else if (error.message === 'Network Error') {
@@ -55,7 +54,7 @@ function normalizeAxiosError(error: AxiosError) {
   return error
 }
 
-// ---- Public instance (สำหรับ login/register ฯลฯ) ----
+/* -------- Public instance -------- */
 export const api: AxiosInstance = axios.create({
   baseURL,
   timeout: 15000,
@@ -74,7 +73,7 @@ api.interceptors.response.use(
   (error: AxiosError) => Promise.reject(normalizeAxiosError(error))
 )
 
-// ---- Protected instance (แนบ Bearer อัตโนมัติ) ----
+/* -------- Protected instance (Bearer) -------- */
 export const authAxios: AxiosInstance = axios.create({
   baseURL,
   timeout: 15000,
@@ -87,7 +86,6 @@ authAxios.interceptors.request.use(
       const token = localStorage.getItem('token')
       if (token) {
         const headers = ensureAxiosHeaders(config)
-        // อย่าทับถ้ามีการตั้ง Authorization เอง (กรณีพิเศษ)
         if (!headers.has('Authorization')) {
           headers.set('Authorization', `Bearer ${token}`)
         }
@@ -102,7 +100,6 @@ authAxios.interceptors.response.use(
   (res) => res,
   (error: AxiosError) => {
     const status = error.response?.status
-    // 401: Unauthorized, 419: Laravel token expired
     if (status === 401 || status === 419) {
       try {
         localStorage.setItem(
@@ -115,7 +112,7 @@ authAxios.interceptors.response.use(
   }
 )
 
-// ---- Export helper สำหรับ AuthContext ----
+/* ---- Helper สำหรับ AuthContext ---- */
 export function setAuthHeader(token?: string) {
   if (token) {
     authAxios.defaults.headers.common['Authorization'] = `Bearer ${token}`
@@ -130,7 +127,7 @@ export function setAuthHeader(token?: string) {
   }
 }
 
-// ---- ตั้งค่าเริ่มต้นจาก localStorage (กันรีเฟรชแล้ว header หาย) ----
+/* ---- ตั้งค่าเริ่มต้นจาก localStorage ---- */
 try {
   if (typeof window !== 'undefined') {
     const t = localStorage.getItem('token')

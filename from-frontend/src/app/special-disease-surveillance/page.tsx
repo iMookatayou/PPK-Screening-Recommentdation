@@ -170,7 +170,7 @@ export default function SpecialDiseaseSurveillancePage() {
             onChange={(e) => setCategoryFilter(e.target.value as CategoryFilter)}
             aria-label="กรองตามหมวดเวลา"
           >
-            <option value="all">ทุกหมวดเวลา</option>
+            <option value="all">เลือกหมวดช่วงเวลา</option>
             <option value="2 ชั่วโมง">2 ชั่วโมง</option>
             <option value="24 ชั่วโมง">24 ชั่วโมง</option>
             <option value="48 ชั่วโมง">48 ชั่วโมง</option>
