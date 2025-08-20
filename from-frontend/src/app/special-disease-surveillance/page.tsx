@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Search } from 'lucide-react'
 import { motion } from 'framer-motion'
 import LoadingSpinner from '@/app/components/ui/LoadingSpinner'
@@ -23,7 +23,7 @@ const THAI_DIGIT_MAP: Record<string, string> = {
   '๕': '5', '๖': '6', '๗': '7', '๘': '8', '๙': '9',
 }
 
-// --- utilities ---
+// ---------- utils ----------
 function normalize(str: string) {
   return (str ?? '')
     .toLowerCase()
@@ -60,10 +60,9 @@ function stripTimeTokens(term: string) {
   return t
 }
 
-// type guard กัน ts(2367)
 const isCategory = (v: CategoryFilter): v is Category => v !== 'all'
 
-// --- component ---
+// ---------- page ----------
 export default function SpecialDiseaseSurveillancePage() {
   const [diseases, setDiseases] = useState<Disease[]>([])
   const [searchTerm, setSearchTerm] = useState('')
@@ -90,18 +89,15 @@ export default function SpecialDiseaseSurveillancePage() {
   }, [])
 
   const normSearch = useMemo(() => normalize(searchTerm), [searchTerm])
-
   const selectedCategoriesFromText = useMemo(
     () => (categoryFilter === 'all' ? detectCategoryQueries(normSearch) : []),
     [normSearch, categoryFilter]
   )
-
   const remainder = useMemo(() => stripTimeTokens(normSearch), [normSearch])
 
   const textMatched = useMemo(() => {
     if (!normSearch) return diseases
 
-    // ถ้าเป็นการค้นหาเฉพาะหมวดเวลา (ไม่มีคำอื่น) และยังไม่ได้เลือก dropdown
     if (categoryFilter === 'all' &&
         selectedCategoriesFromText.length > 0 &&
         remainder.length === 0) {
@@ -119,7 +115,6 @@ export default function SpecialDiseaseSurveillancePage() {
     })
   }, [diseases, normSearch, remainder, categoryFilter, selectedCategoriesFromText.length])
 
-  // บังคับกรองตาม dropdown ถ้าเลือกหมวด
   const base = useMemo(() => {
     if (!isCategory(categoryFilter)) return textMatched
     return textMatched.filter((d) => d.category === categoryFilter)
@@ -137,7 +132,6 @@ export default function SpecialDiseaseSurveillancePage() {
   }, [normSearch, categoryFilter, base])
 
   const CATEGORY_ORDER: Category[] = ['2 ชั่วโมง', '24 ชั่วโมง', '48 ชั่วโมง']
-
   const renderDropdownSingle = isCategory(categoryFilter)
   const renderAllCategories = categoryFilter === 'all' && !normSearch
   const renderSelectedFromText =
@@ -146,6 +140,15 @@ export default function SpecialDiseaseSurveillancePage() {
     remainder.length === 0
   const renderFlatResults = categoryFilter === 'all' && !!normSearch && !renderSelectedFromText
   const selectedOrdered = CATEGORY_ORDER.filter((c) => selectedCategoriesFromText.includes(c))
+
+  // สำหรับข้อความราชการด้านล่าง
+  const isSearching = normSearch.length > 0 || isCategory(categoryFilter)
+  const searchImplies2h =
+    (isCategory(categoryFilter) && categoryFilter === '2 ชั่วโมง') ||
+    selectedCategoriesFromText.includes('2 ชั่วโมง')
+  const searchImplies24or48 =
+    (isCategory(categoryFilter) && (categoryFilter === '24 ชั่วโมง' || categoryFilter === '48 ชั่วโมง')) ||
+    selectedCategoriesFromText.some((c) => c === '24 ชั่วโมง' || c === '48 ชั่วโมง')
 
   return (
     <div className={styles.pageBackground}>
@@ -211,6 +214,36 @@ export default function SpecialDiseaseSurveillancePage() {
             {renderFlatResults && (
               <CategoryTable title="ผลการค้นหา" rows={base} />
             )}
+
+            {/* ===== ข้อความราชการใต้ผลค้นหา ===== */}
+            {isSearching && (
+              <div style={{ marginTop: 12 }}>
+                {searchImplies2h && (
+                  <GovNote>
+                    <strong>กรณีโรคที่ต้องแจ้งภายใน 2 ชั่วโมง:</strong>{' '}
+                    โทรแจ้ง <u>งานป้องกันควบคุมโรคและระบาดวิทยา</u> 4552/5826
+                    หรือโทร. 081-8620285 / 097-5072491
+                  </GovNote>
+                )}
+
+                {searchImplies24or48 && (
+                  <GovNote>
+                    <strong>กรณีโรคที่ต้องแจ้งภายใน 24 ชม. / 48 ชม.:</strong>{' '}
+                    <u>ในเวลาราชการ</u> แจ้ง <u>เวชกรรมสังคม</u> 4552
+                    หรือโทร 081-8620285{' '}
+                    <u>นอกเวลาราชการ</u> *คุณเดือนเต็มดวง โทร 063-4649883
+                  </GovNote>
+                )}
+              </div>
+            )}
+
+            {/* บล็อกติดต่อทั่วไปคงที่ */}
+            <div style={{ marginTop: 12 }}>
+              <GovNote>
+                โทรแจ้ง <u>งานป้องกันควบคุมโรคและระบาดวิทยา</u> 4552/5826
+                หรือโทร. 081-8620285 / 097-5072491
+              </GovNote>
+            </div>
           </>
         )}
       </div>
@@ -218,7 +251,7 @@ export default function SpecialDiseaseSurveillancePage() {
   )
 }
 
-/* ---------- Subcomponent ---------- */
+/* ---------- Subcomponents ---------- */
 function CategoryTable({ title, rows }: { title: string; rows: Disease[] }) {
   return (
     <div className={styles.categorySection}>
@@ -239,7 +272,10 @@ function CategoryTable({ title, rows }: { title: string; rows: Disease[] }) {
                 <tr key={d.id}>
                   <td>{d.name_th}</td>
                   <td>{d.name_en ?? '-'}</td>
-                  <td>{d.icd_10 ?? '-'}</td>
+
+                  {/* --- ICD-10 cell with popover --- */}
+                  <ICDCell value={d.icd_10 ?? '-'} />
+
                   <td>
                     {d.category === '2 ชั่วโมง'
                       ? <span className={styles.alertRed}>แจ้งภายใน 2 ชม.</span>
@@ -256,5 +292,145 @@ function CategoryTable({ title, rows }: { title: string; rows: Disease[] }) {
         </table>
       </div>
     </div>
+  )
+}
+
+/** กล่องข้อความราชการแบบเรียบ ไม่พึ่ง CSS ไฟล์ */
+function GovNote({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      role="note"
+      aria-label="ประกาศแจ้งติดต่อหน่วยงาน"
+      style={{
+        border: '1px solid #cbd5e1',
+        borderLeft: '4px solid #334155',
+        padding: '10px 12px',
+        borderRadius: 8,
+        background: '#f8fafc',
+        fontSize: 14,
+        lineHeight: 1.6,
+        color: '#0f172a',
+      }}
+    >
+      {children}
+    </div>
+  )
+}
+
+/** เซลล์ ICD-10: แสดงย่อในตาราง แต่ hover/focus/แตะ เปิดกล่อง popover เห็นเต็ม + คัดลอกได้ */
+function ICDCell({ value }: { value: string }) {
+  const [open, setOpen] = useState(false)
+  const wrapperRef = useRef<HTMLTableCellElement | null>(null)
+  const touchTimer = useRef<number | null>(null)
+
+  // ปิดเมื่อคลิกนอก
+  useEffect(() => {
+    function onDocClick(e: MouseEvent) {
+      if (!open) return
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [open])
+
+  const show = () => setOpen(true)
+  const hide = () => setOpen(false)
+  const toggle = () => setOpen(v => !v)
+
+  const onTouchStart = () => {
+    if (touchTimer.current) window.clearTimeout(touchTimer.current)
+    touchTimer.current = window.setTimeout(() => setOpen(true), 250) as unknown as number
+  }
+  const onTouchEnd = () => {
+    if (touchTimer.current) {
+      window.clearTimeout(touchTimer.current)
+      touchTimer.current = null
+    }
+  }
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value)
+    } catch {}
+  }
+
+  return (
+    <td
+      ref={wrapperRef}
+      title={value}
+      aria-label={value}
+      onMouseEnter={show}
+      onMouseLeave={hide}
+      onFocus={show}
+      onBlur={hide}
+      onClick={toggle}        // รองรับคลิกเปิด/ปิด
+      onTouchStart={onTouchStart} // แตะค้างเปิดบน iPad/มือถือ
+      onTouchEnd={onTouchEnd}
+      style={{ position: 'relative', cursor: 'default' }}
+    >
+      {/* ข้อความในเซลล์: ให้ตารางเดิมตัดด้วย ellipsis ตาม CSS เดิม */}
+      <span title={value}>{value}</span>
+
+      {/* Popover */}
+      {open && (
+        <div
+          role="dialog"
+          aria-modal="false"
+          style={{
+            position: 'absolute',
+            zIndex: 9999,
+            top: '100%',
+            left: 0,
+            marginTop: 6,
+            maxWidth: 520,
+            minWidth: 260,
+            background: '#ffffff',
+            border: '1px solid #cbd5e1',
+            borderRadius: 8,
+            boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+            padding: '10px 12px',
+            lineHeight: 1.5,
+            whiteSpace: 'normal',
+            wordBreak: 'break-word',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ fontSize: 13, color: '#0f172a' }}>{value}</div>
+
+          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+            <button
+              type="button"
+              onClick={copy}
+              style={{
+                fontSize: 12,
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                padding: '4px 8px',
+                background: '#f8fafc',
+                cursor: 'pointer'
+              }}
+            >
+              คัดลอก ICD-10
+            </button>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              style={{
+                fontSize: 12,
+                border: '1px solid #cbd5e1',
+                borderRadius: 6,
+                padding: '4px 8px',
+                background: '#ffffff',
+                cursor: 'pointer'
+              }}
+            >
+              ปิด
+            </button>
+          </div>
+        </div>
+      )}
+    </td>
   )
 }
