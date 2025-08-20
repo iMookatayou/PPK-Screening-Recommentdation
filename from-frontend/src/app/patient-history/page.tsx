@@ -55,6 +55,39 @@ type DetailCase = {
 type ApiResp<T> = { code: string; message: string; data: T; errors?: unknown };
 
 /* ===================== Utils ===================== */
+
+/* ---------- Tiny Chip helpers (no style logic) ---------- */
+function Chip({
+  children,
+  size = 'md',
+  variant = 'default',
+}: {
+  children: React.ReactNode;
+  size?: 'sm' | 'md';
+  variant?: 'default' | 'clinic' | 'sym';
+}) {
+  const cls = [
+    styles.chip,
+    size === 'sm' ? styles.chipSm : '',
+    variant === 'clinic' ? styles.chipClinic : '',
+    variant === 'sym' ? styles.chipSym : '',
+  ].join(' ');
+  return <span className={cls}>{children}</span>;
+}
+
+function renderSymChips(all: string[], limit = 3) {
+  const head = all.slice(0, limit);
+  const more = Math.max(0, all.length - head.length);
+  return (
+    <>
+      {head.map((s, i) => (
+        <Chip key={i} size="sm" variant="sym">{s} </Chip>
+      ))}
+      {more > 0 && <span className={styles.badgeMore}>+{more}</span>}
+    </>
+  );
+}
+
 function fmt(dt?: string) {
   if (!dt) return '—';
   const iso = dt.includes('T') ? dt : dt.replace(' ', 'T');
@@ -205,6 +238,53 @@ function openDatePickerSafely(el: HTMLInputElement) {
   });
 }
 
+/** สร้างชิปแบบจำกัดจำนวน + ตัวนับ */
+function renderChips(
+  items: string[] | any[] | string | null | undefined,
+  { limit = 3, variant = 'sym' }: { limit?: number; variant?: 'sym'|'clinic' }
+) {
+  const arr = (variant === 'sym' ? filterSymptoms(items as any) : toStringList(items))
+    .map(x => String(x).trim())
+    .filter(Boolean);
+
+  if (!arr.length) return <span className={styles.muted}>—</span>;
+
+  const head = arr.slice(0, limit);
+  const more = arr.length - head.length;
+
+  return (
+    <>
+      {head.map((t, i) => (
+        <span
+          key={`${variant}-${i}-${t}`}
+          className={`${styles.chip} ${styles.chipSm} ${variant === 'clinic' ? styles.chipClinic : styles.chipSym}`}
+          title={t}
+        >
+          {t}
+        </span>
+      ))}
+      {more > 0 && <span className={styles.badgeMore}>+{more}</span>}
+    </>
+  );
+}
+
+/** แสดง “ชิปอาการ • ชิปคลินิก (+N)” ในแถวเดียวแบบย่อ */
+function renderSymAndClinicInline(sym: any, clinics: any) {
+  const S = filterSymptoms(sym);
+  const C = toStringList(clinics);
+  return (
+    <>
+      <span className={styles.tagRow}>
+        {renderChips(S, { limit: 2, variant: 'sym' })}
+      </span>
+      {C.length > 0 && <span className={styles.sepDot}>•</span>}
+      <span className={styles.tagRow}>
+        {renderChips(C, { limit: 2, variant: 'clinic' })}
+      </span>
+    </>
+  );
+}
+
 /* ===================== Component ===================== */
 export default function PatientHistory() {
   const { addToast } = useToast();
@@ -349,10 +429,29 @@ export default function PatientHistory() {
                 <span className={styles.comboMain}>
                   {fmt(selectedItem.created_at)} • {selectedItem.name}
                 </span>
-                <span className={styles.comboSubs}>
-                  {/* chips ตามเดิม */}
-                  …
-                </span>
+                  <span className={styles.comboSubs}>
+                    {(() => {
+                      const syms = filterSymptoms(selectedItem.symptoms);
+                      const clinics = toStringList(selectedItem.summary_clinics).map(c => clinicLabelMap[c] || c);
+                      return (
+                        <>
+                          {/* symptoms chips (ตัด 0–2 อัน + ตัวนับเพิ่มเติม) */}
+                          <span className={styles.tagRow}>
+                            {renderSymChips(syms, 2)}
+                          </span>
+                          {/* คั่นนิดนึง */}
+                          {clinics.length > 0 && <span className={styles.sepDot}>•</span>}
+                          {/* clinic chips 1–2 อัน */}
+                          <span className={styles.tagRow}>
+                            {clinics.slice(0, 2).map((c, i) => (
+                              <Chip key={i} size="sm" variant="clinic">{c}</Chip>
+                            ))}
+                            {clinics.length > 2 && <span className={styles.badgeMore}>+{clinics.length - 2}</span>}
+                          </span>
+                        </>
+                      );
+                    })()}
+                  </span>
               </>
             ) : (
               <span className={styles.comboPlaceholder}>— เลือกเคส —</span>
@@ -438,7 +537,6 @@ export default function PatientHistory() {
         role="search"
         aria-label="ค้นหาประวัติผู้ป่วย"
       >
-        {/* แถวบน: CID | ช่วงเวลา | ปุ่มค้นหา (ขวาบน) */}
         <div className={`${styles.row} ${styles.filtersRowTop}`}>
           <div className={styles.col4}>
             <label className={styles.label} htmlFor="cidInput">เลขบัตรประชาชน (CID)</label>
@@ -479,7 +577,6 @@ export default function PatientHistory() {
             </div>
           </div>
 
-          {/* ปุ่มค้นหา ขวาบน */}
           <div className={`${styles.col5} ${styles.rightEnd}`}>
             <button
               id="searchBtn"
@@ -496,7 +593,6 @@ export default function PatientHistory() {
           </div>
         </div>
 
-        {/* แถวล่าง: วันที่เริ่ม | วันที่สิ้นสุด (เว้นระยะนิดนึง) */}
         <div className={`${styles.row} ${styles.filtersRowDates}`}>
           <div className={`${styles.col3} ${styles.dateItem}`}>
             <label className={styles.label} htmlFor="startDate">วันที่เริ่ม</label>
@@ -536,7 +632,6 @@ export default function PatientHistory() {
 
       {/* Selector + List */}
       <motion.div className={styles.card} variants={cardVar} initial="hidden" animate="show">
-        {/* Dropdown */}
         <div className={styles.row}>
           <div className={styles.col12}>
             <CaseDropdown items={list?.data ?? []} value={selected} onChange={(v) => pickCase(v)} />
@@ -546,7 +641,6 @@ export default function PatientHistory() {
           </div>
         </div>
 
-        {/* Table */}
         <div className={styles.tableWrap}>
           {loading ? (
             <LoadingSpinner message="กำลังค้นหาประวัติ..." size={48} />
@@ -554,11 +648,12 @@ export default function PatientHistory() {
             <table className={styles.table} aria-label="ตารางประวัติผู้ป่วย">
               <thead>
                 <tr>
+                  <th className={styles.colMenu} aria-label="เมนู"></th>
                   <th className={styles.colNo}>ลำดับ</th>
                   <th>วันที่/เวลา</th>
                   <th>ชื่อ-นามสกุล</th>
-                  <th>อาการ (ทั้งหมด)</th>
-                  <th>คลินิก (ทั้งหมด)</th>
+                  <th>อาการ</th>
+                  <th>คลินิก</th>
                 </tr>
               </thead>
               <tbody>
@@ -566,6 +661,14 @@ export default function PatientHistory() {
                   {list?.data?.length ? (
                     list.data.map((row, i) => {
                       const isActive = selected === row.case_id;
+                      const symList = filterSymptoms(row.symptoms);
+                      const clinicList = toStringList(row.summary_clinics).map(c => clinicLabelMap[c] || c);
+
+                      const symHead = symList.slice(0, 2);
+                      const cliHead = clinicList.slice(0, 2);
+                      const symMore = symList.length - symHead.length;
+                      const cliMore = clinicList.length - cliHead.length;
+
                       return (
                         <motion.tr
                           key={row.case_id}
@@ -575,24 +678,53 @@ export default function PatientHistory() {
                           animate="show"
                           exit={{ opacity: 0 }}
                           className={isActive ? styles.activeRow : undefined}
+                          onClick={() => pickCase(row.case_id)}
+                          role="button"
+                          tabIndex={0}
                         >
+                          <td className={styles.tdMenu}>
+                            <button
+                              type="button"
+                              className={styles.menuBtn}
+                              aria-label="เมนูเพิ่มเติมของแถวนี้"
+                              onClick={(e) => { e.stopPropagation(); }}
+                            >
+                              <span className={styles.menuDot} />
+                              <span className={styles.menuDot} />
+                              <span className={styles.menuDot} />
+                            </button>
+                          </td>
+
                           <td>{i + 1}</td>
                           <td>{fmt(row.created_at)}</td>
                           <td>{row.name}</td>
-                          <td title={filterSymptoms(row.symptoms).join(', ')}>
-                            {formatSymptoms(row.symptoms)}
+
+                          {/* อาการ */}
+                          <td className={styles.tdTags}>
+                            <div className={styles.tagRow}>
+                              {symHead.map((s, k) => (
+                                <span key={k} className={`${styles.chip} ${styles.chipSm} ${styles.chipSym}`} title={s}>{s}</span>
+                              ))}
+                              {symMore > 0 && <span className={styles.badgeMore}>+{symMore}</span>}
+                            </div>
                           </td>
-                          <td>{
-                            toStringList(row.summary_clinics)
-                              .map((c) => clinicLabelMap[c] || c)
-                              .join(', ') || '—'
-                          }</td>
+
+                          {/* คลินิก */}
+                          <td className={styles.tdTags}>
+                            <div className={styles.tagRow}>
+                              {cliHead.map((c, k) => (
+                                <span key={k} className={`${styles.chip} ${styles.chipSm} ${styles.chipClinic}`} title={c}>{c}</span>
+                              ))}
+                              {cliMore > 0 && <span className={styles.badgeMore}>+{cliMore}</span>}
+                              {clinicList.length === 0 && <span className={styles.muted}>—</span>}
+                            </div>
+                          </td>
                         </motion.tr>
                       );
                     })
                   ) : (
                     <tr>
-                      <td colSpan={5} className={styles.tableEmpty}>ไม่มีข้อมูล — กรอก CID แล้วกดค้นหา</td>
+                      <td colSpan={6} className={styles.tableEmpty}>ไม่มีข้อมูล — กรอก CID แล้วกดค้นหา</td>
                     </tr>
                   )}
                 </AnimatePresence>
@@ -601,7 +733,6 @@ export default function PatientHistory() {
           )}
         </div>
 
-        {/* Pager */}
         {(list?.meta?.last_page ?? 1) > 1 && !loading && (
           <div className={styles.pagination} role="navigation" aria-label="เปลี่ยนหน้า">
             {Array.from({ length: list?.meta?.last_page ?? 1 }).map((_, idx) => {
@@ -663,6 +794,7 @@ export default function PatientHistory() {
                   {detail.question_results.map((qr, i) => {
                     const clinics = Array.isArray(qr.clinic) ? qr.clinic : [];
                     const clinicLabels = clinics.map(c => clinicLabelMap[c] || c);
+                    const symList = toStringList(qr.symptoms);
 
                     return (
                       <motion.div
@@ -674,27 +806,35 @@ export default function PatientHistory() {
                         animate="show"
                         exit={{ opacity: 0 }}
                       >
-                        <div className={styles.qrRowTop}>
-                          <div className={styles.qrIndex}>{i + 1}</div>
-                          <div className={styles.qrTitle}>
-                            {qr.question_title || qr.question}
-                          </div>
-                          <div className={styles.qrBadges}>
-                            {qr.is_refer_case && (
-                              <span className={`${styles.qrBadge} ${styles.qrBadgeRefer}`}>REFER</span>
-                            )}
-                            <span className={`${styles.qrBadge} ${styles.qrBadgeType}`}>
-                              {(qr.type || 'FORM').toUpperCase()}
-                            </span>
-                          </div>
+                        {/* บรรทัดหัว: เลขลำดับ + ชื่อคำถาม */}
+                        <div className={styles.qrHeaderLine}>
+                          <span className={styles.qrIndexBox}>{i + 1}</span>
+                          <span className={styles.qrTitleText}>{qr.question_title || qr.question}</span>
                         </div>
 
-                        <div className={styles.qrMeta}>{fmt(qr.created_at)}</div>
+                        {/* บรรทัดประเภท (FORM/...) แยกบรรทัดตามรูปตัวอย่าง */}
+                        <div className={styles.qrTypeLine}>
+                          <span className={styles.qrTypeBadge}>{(qr.type || 'FORM').toUpperCase()}</span>
+                        </div>
 
-                        <div className={styles.qrDetail}>
-                          <b>คลินิก:</b> {clinicLabels.join(', ') || '—'}
-                          {qr.symptoms?.length ? <> • <b>อาการ:</b> {qr.symptoms.join(', ')}</> : null}
-                          {qr.note ? <> • <b>หมายเหตุ:</b> {qr.note}</> : null}
+                        {/* เวลา */}
+                        <div className={styles.qrTimeLine}>{fmt(qr.created_at)}</div>
+
+                        {/* บรรทัดรายละเอียด: คลินิก • อาการ • หมายเหตุ */}
+                        <div className={styles.qrInfoLine}>
+                          <b>คลินิก:</b>&nbsp;{clinicLabels.join(', ') || '—'}
+                          {symList.length > 0 && (
+                            <>
+                              <span className={styles.dotSep} aria-hidden> • </span>
+                              <b>อาการ:</b>&nbsp;{symList.join(', ')}
+                            </>
+                          )}
+                          {qr.note && (
+                            <>
+                              <span className={styles.dotSep} aria-hidden> • </span>
+                              <b>หมายเหตุ:</b>&nbsp;{qr.note}
+                            </>
+                          )}
                         </div>
                       </motion.div>
                     );
@@ -707,4 +847,5 @@ export default function PatientHistory() {
       </motion.div>
     </div>
   );
+
 }

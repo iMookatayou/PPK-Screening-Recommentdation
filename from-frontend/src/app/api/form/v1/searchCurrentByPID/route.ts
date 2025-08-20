@@ -1,5 +1,22 @@
+// app/api/rights/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 
+/** ใช้ env ฝั่ง server ก่อน (FORM_API) แล้วค่อย fallback ไป NEXT_PUBLIC_FORM_API */
+function getApiBase(): string {
+  const a = (process.env.FORM_API || '').trim()
+  if (a) return a
+  const b = (process.env.NEXT_PUBLIC_FORM_API || '').trim()
+  if (b) return b
+  return 'http://localhost:5000' // สุดท้าย fallback local
+}
+
+/** join URL แบบปลอดภัยเรื่อง "/" */
+function joinUrl(base: string, ...parts: Array<string | number>): string {
+  const trimmed = [base.replace(/\/+$/, ''), ...parts.map(String).map(p => p.replace(/^\/+|\/+$/g, ''))]
+  return trimmed.join('/')
+}
+
+/** แปลงวันที่ พ.ศ.รูปแบบ YYYYMMDD -> DD/MM/YYYY (ค.ศ.) */
 function formatThaiDate(thaiDateStr?: string): string | null {
   if (!thaiDateStr || thaiDateStr.length !== 8) return null
   try {
@@ -14,38 +31,55 @@ function formatThaiDate(thaiDateStr?: string): string | null {
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url)
-  const cid = url.searchParams.get('cid') || ''
+  const cid = (url.searchParams.get('cid') || '').trim()
 
   if (!cid || cid.length !== 13) {
     return NextResponse.json({ error: 'Invalid CID' }, { status: 400 })
   }
 
-  const backendURL =
-    process.env.NEXT_PUBLIC_FORM_API?.trim() !== ''
-      ? `${process.env.NEXT_PUBLIC_FORM_API}/v1/searchCurrentByPID/${cid}`
-      : `http://localhost:5000/v1/searchCurrentByPID/${cid}`
+  const API_BASE = getApiBase()
+
+  const endpoint = joinUrl(API_BASE, 'v1', 'searchCurrentByPID', cid)
+
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 10000) // 10s
 
   try {
-    const res = await fetch(backendURL, { cache: 'no-store' })
+    const res = await fetch(endpoint, {
+      method: 'GET',
+      cache: 'no-store',
+      signal: controller.signal,
+      headers: {
+        Accept: 'application/json',
+        // ถ้าต้องการ token เฉพาะ ใส่ได้ตรงนี้ เช่น:
+        // Authorization: `Bearer ${process.env.NHSO_TOKEN}`
+      },
+    })
+
+    const isJson = res.headers.get('content-type')?.includes('application/json')
+    const payload = isJson ? await res.json().catch(() => ({})) : {}
 
     if (!res.ok) {
+      clearTimeout(timeout)
       return NextResponse.json(
-        { error: 'ไม่สามารถเชื่อมต่อระบบสิทธิได้' },
-        { status: res.status }
+        { error: payload?.error || 'ไม่สามารถเชื่อมต่อระบบสิทธิได้' },
+        { status: res.status },
       )
     }
 
-    const data = await res.json()
-    const info = data?.data || {}
+    clearTimeout(timeout)
 
-    if (!info.maininscl) {
+    const info = (payload as any)?.data ?? {}
+
+    // กรณีไม่พบข้อมูล
+    if (!info?.maininscl) {
       return NextResponse.json(
         {
           status: 'not_found',
           message: 'ไม่พบข้อมูลสิทธิของเลขบัตรประชาชนนี้ในระบบ',
           cid,
         },
-        { status: 200 }
+        { status: 200 },
       )
     }
 
@@ -66,16 +100,20 @@ export async function GET(req: NextRequest) {
         amphur: info.amphur?.trim?.() || '',
         province: info.province?.trim?.() || '',
       },
-      raw: data,
+      raw: payload,
     })
   } catch (err) {
+    clearTimeout(timeout)
     console.error('[API ERROR]', err)
+    const aborted = (err as any)?.name === 'AbortError'
     return NextResponse.json(
       {
-        status: 'unreachable',
-        message: 'ไม่สามารถเชื่อมต่อกับระบบสิทธิได้ในขณะนี้ กรุณาลองใหม่ภายหลัง',
+        status: aborted ? 'timeout' : 'unreachable',
+        message: aborted
+          ? 'เชื่อมต่อระบบสิทธิเกินเวลา โปรดลองใหม่'
+          : 'ไม่สามารถเชื่อมต่อกับระบบสิทธิได้ในขณะนี้ กรุณาลองใหม่ภายหลัง',
       },
-      { status: 504 }
+      { status: 504 },
     )
   }
 }

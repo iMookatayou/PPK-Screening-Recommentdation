@@ -210,7 +210,7 @@ export default function FormContent() {
     rightsTidRef.current = window.setTimeout(() => ctrl.abort(), 8000)
 
     try {
-      const res = await fetch(`/api/rights?cid=${cid}`, { signal: ctrl.signal, cache: 'no-store' })
+      const res = await fetch(`/api/form/v1/searchCurrentByPID?cid=${cid}`, { signal: ctrl.signal, cache: 'no-store' })
       const body = await res.json().catch(() => ({}))
 
       if (!res.ok) {

@@ -1,8 +1,9 @@
 /* =========================
-   GOV STYLE — PATIENT HISTORY (Full CSS)
+   GOV STYLE — PATIENT HISTORY (Full CSS, Module Scope)
    ========================= */
 
-/* ---------- Base / Typography ---------- */
+/* ---------- Base / Typography ----------
+   หมายเหตุ: ถ้าไม่ต้องการ @font-face ใน module ให้ย้ายไป global.css ได้ */
 @font-face{
   font-family:'Sarabun';
   src:url('/fonts/sarabun/Sarabun-Regular.woff2') format('woff2');
@@ -32,24 +33,24 @@
 .pageTitle{
   display:flex; align-items:center; gap:10px;
   padding-bottom:10px; margin:0 0 18px;
-  border-bottom:3px solid var(--green);
-  font-size:1.25rem; font-weight:700; letter-spacing:.1px; color:#0b3d2e;
+  border-bottom:3px solid #198754;
+  font-size:1.25rem; font-weight:700; color:#0b3d2e;
 }
-.titleIcon{ width:22px; height:22px; color:var(--green); }
+.titleIcon{ width:22px; height:22px; color:#198754; }
 
 /* ---------- Card ---------- */
 .card{
-  background:#fff; border:1px solid var(--border);
+  background:#fff; border:1px solid #e5e7eb;
   border-radius:12px; padding:14px 14px 16px;
   box-shadow:0 1px 0 rgba(16,24,40,.02); margin-bottom:14px;
 }
 .sectionTitle{ font-weight:700; color:#0f172a; margin:4px 0 8px; }
 
 /* ---------- Grid ---------- */
-.row{ display:grid; grid-template-columns:repeat(12,1fr); gap:var(--gap); }
+.row{ display:grid; grid-template-columns:repeat(12,1fr); gap:12px; }
 .col12{ grid-column:span 12; }
 .col6{ grid-column:span 6; min-width:0; }
-.col5{ grid-column:span 5; }     /* ใช้กับคอลัมน์ปุ่มขวาบน */
+.col5{ grid-column:span 5; }     /* ปุ่มขวาบน */
 .col4{ grid-column:span 4; }
 .col3{ grid-column:span 3; }
 .col2{ grid-column:span 2; }
@@ -74,7 +75,7 @@
   width:18px; height:18px; color:#77819a; pointer-events:none;
 }
 .field{
-  box-sizing:border-box; width:100%; min-height:var(--h-field);
+  box-sizing:border-box; width:100%; min-height:40px;
   padding:8px 12px; border:1px solid #cfd5e1; border-radius:10px; background:#fff;
   font-size:.98rem; line-height:1.2; outline:none;
   transition:border-color .15s ease, box-shadow .15s ease;
@@ -83,39 +84,25 @@
 .field:hover{ border-color:#98a4ba; }
 .field:focus{ border-color:#198754; box-shadow:0 0 0 3px rgba(25,135,84,.16); }
 
-/* ---------- Fixed widths per control ---------- */
-#cidInput.field{ width:var(--w-cid) !important; max-width:100%; }
-#rangeSelect.field {
-  width: var(--w-range) !important;
-  max-width: 100%;
-  margin-left: 8px;   
-}
-label[for="rangeSelect"] + .inputWithIcon {
-  padding-left: 6px;   /* หรือใช้ margin-left ก็ได้ */
-}
+/* ---------- Fixed widths per control (module-safe) ---------- */
+#cidInput.field{ width:340px !important; max-width:100%; }
+#rangeSelect.field { width:220px !important; max-width:100%; margin-left:8px; }
+label[for="rangeSelect"] + .inputWithIcon { padding-left:6px; }
+.rangeCol { padding-left:8px; }
+@media (max-width:640px){ .rangeCol { padding-left:0; } }
 
-/* ขยับทั้งคอลัมน์เล็กน้อย */
-.rangeCol { padding-left: 8px; }
-
-/* มือถือรีเซ็ต */
-@media (max-width:640px){
-  .rangeCol { padding-left: 0; }
-}
-
-/* Date targets (ใช้ตัวแปรเดียว คุมทั้ง start/end) */
+/* ---------- Date inputs ---------- */
+.dateAuto{ font-variant-numeric:tabular-nums; }
 #startDate.field,
 #endDate.field,
 .field[name="start_date"],
 .field[name="end_date"]{
-  width:var(--w-date) !important;
-  min-width:var(--date-min) !important;
-  max-width:var(--date-max) !important;
-  font-variant-numeric:tabular-nums;
+  width:220px !important;
+  min-width:160px !important;
+  max-width:280px !important;
   text-align:left;
   padding-right:42px; /* กันชน icon calendar */
 }
-
-/* เลื่อน “วันที่สิ้นสุด” ออกขวาอีกนิด */
 #endDate.field, .field[name="end_date"]{ margin-left:6px; }
 
 /* Date icon (CSS-only) */
@@ -128,15 +115,23 @@ label[for="rangeSelect"] + .inputWithIcon {
   opacity:0; background:none; cursor:pointer; width:2.2em; height:100%;
 }
 
-/* ---------- Dropdown (generic) ---------- */
+/* =========================
+   Dropdown (generic + case)
+   ========================= */
 .dropdown{ position:relative; }
+
 .comboButton{
   width:100%; border:1px solid #d1d5db; background:#fff; border-radius:10px;
-  padding:10px 12px; text-align:left; cursor:pointer; min-height:var(--h-field);
+  padding:10px 12px; text-align:left; cursor:pointer; min-height:44px;
 }
 .comboPlaceholder{ color:#9ca3af; }
-.comboMain{ display:block; font-weight:600; font-size:14px; margin-bottom:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.comboSubs{ display:flex; flex-wrap:wrap; gap:6px; }
+.comboMain{
+  display:block; font-weight:600; font-size:14px; margin-bottom:4px;
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+}
+.comboSubs{ display:flex; flex-wrap:nowrap; gap:6px; overflow:hidden; align-items:center; }
+.sepDot{ color:#9aa3af; }
+
 .comboPanel{
   position:absolute; z-index:50; top:calc(100% + 6px); left:0; right:0;
   background:#fff; border:1px solid #d1d5db; border-radius:12px;
@@ -145,6 +140,7 @@ label[for="rangeSelect"] + .inputWithIcon {
 .comboSearchRow{
   display:flex; align-items:center; gap:8px; padding:6px 8px;
   border:1px solid #e5e7eb; border-radius:10px; margin:6px 6px 8px 6px; background:#fff;
+  position:sticky; top:0; z-index:1;
 }
 .comboSearchIcon{ width:16px; height:16px; color:#6b7280; }
 .comboSearch{ flex:1; border:none; outline:none; font-size:14px; min-width:0; }
@@ -154,27 +150,41 @@ label[for="rangeSelect"] + .inputWithIcon {
 .comboItem:hover{ background:#f3f4f6; }
 .comboItemActive{ background:#eef2ff; }
 
-/* ---------- Buttons ---------- */
+/* Case dropdown specific */
+.dropdownCase{ width:100%; max-width:100%; }
+.dropdownCase .comboButton{ display:flex; flex-direction:column; align-items:flex-start; gap:4px; white-space:normal; overflow:visible; }
+.dropdownCase .comboMain{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.dropdownCase .comboSubs{ display:flex; gap:6px; flex-wrap:nowrap; overflow:hidden; }
+.dropdownCase .chip{ max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.dropdownCase .comboPanel{ left:0; right:auto; width:100%; max-width:100%; padding-top:8px; }
+
+/* =========================
+   Buttons
+   ========================= */
 .btn{
   display:flex; align-items:center; justify-content:center; gap:8px;
   padding:10px 14px; border-radius:10px; border:1px solid #cfd5e1; background:#fff;
-  font-size:.98rem; cursor:pointer; min-height:var(--h-field);
+  font-size:.98rem; cursor:pointer; min-height:40px;
   width:100%; box-sizing:border-box;
 }
 .btn:disabled{ opacity:.6; cursor:not-allowed; }
 .btnPrimary{ background:#198754; border-color:#198754; color:#fff; font-weight:700; }
 .btnPrimary:hover:not(:disabled){ background:#157347; border-color:#157347; }
 .btnPrimary:focus-visible{ outline:none; box-shadow:0 0 0 3px rgba(25,135,84,.22); }
+.btnLabel{ display:flex; justify-content:center; align-items:center; }
+.btn.btnPrimary{ min-width:120px; }
 
-/* ---------- Table ---------- */
+/* =========================
+   Table
+   ========================= */
 .tableWrap{ width:100%; overflow-x:auto; overflow-y:visible; -webkit-overflow-scrolling:touch; }
 .table{
   width:100%; border-collapse:separate; border-spacing:0;
-  background:#fff; border:1px solid var(--border); border-radius:12px; overflow:hidden;
+  background:#fff; border:1px solid #e5e7eb; border-radius:12px; overflow:hidden;
 }
 .table thead th{
-  background:var(--green); color:#fff; padding:12px; text-align:left;
-  font-weight:700; letter-spacing:.1px; font-size:.98rem; position:sticky; top:0; z-index:1; white-space:nowrap;
+  background:#198754; color:#fff; padding:12px; text-align:left;
+  font-weight:700; letter-spacing:.1px; font-size:.98rem; white-space:nowrap;
 }
 .table tbody td{
   padding:10px 12px; vertical-align:top; border-top:1px solid #eef1f6;
@@ -184,80 +194,273 @@ label[for="rangeSelect"] + .inputWithIcon {
 .table tbody tr:hover td{ background:#f3faf6; }
 .tableEmpty{ text-align:center; color:#e2e8f0; padding:16px; }
 
+/* เมนู “…” ซ้ายสุด */
+.colMenu{ width:34px; }
+.tdMenu{ text-align:center; }
+.menuBtn{ display:inline-flex; gap:3px; align-items:center; padding:6px; border-radius:8px; border:1px solid transparent; background:#fff; }
+.menuBtn:hover{ background:#f8fafc; border-color:#eef2f7; }
+.menuDot{ width:4px; height:4px; border-radius:50%; background:#6b7280; display:inline-block; }
+
+/* คอลัมน์แท็กในตาราง */
+.tdTags{ white-space:normal; }
+
+/* =========================
+   Chips (symptoms/clinics)
+   ========================= */
+.tagRow{ display:flex; flex-wrap:wrap; gap:6px; }
+.chip{
+  display:inline-block; padding:.15rem .5rem; border-radius:999px;
+  background:#f3f6fb; border:1px solid #e6eaf2; font-size:12px; line-height:1.3; color:#374151;
+}
+.chipSm{ padding:.05rem .45rem; font-size:11px; }
+.chipClinic{ background:#eef8ff; border-color:#d6ecff; color:#064e7a; }
+.chipSym{ background:#f6f7ff; border-color:#e6e8ff; color:#312e81; }
+.badgeMore{ font-size:11px; padding:0 .3rem; color:#6b7280; border-radius:999px; background:#dbeafe; font-weight:600; }
+
+/* =========================
+   Question Results
+   ========================= */
+.qrList{ display:flex; flex-direction:column; gap:12px; }
+
+.qrItem{
+  background:#fff;
+  border:1px solid #e5e7eb;
+  border-radius:12px;
+  padding:12px 14px;
+  box-shadow:0 1px 2px rgba(16,24,40,0.04);
+}
+
+/* แถวบนสุดของแต่ละผล */
+.qrRowTop{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:6px;
+}
+
+/* วงกลมเขียวรอบตัวเลข */
+.qrIndex{
+  flex-shrink:0;
+  width:28px;
+  height:28px;
+  border-radius:50%;
+  background:#198754;
+  color:#fff;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-weight:700;
+  font-size:0.95rem;
+}
+
+/* ชื่อคำถาม */
+.qrTitle{
+  flex:1;
+  font-weight:600;
+  color:#0f172a;
+}
+
+/* badge ต่างๆ */
+.qrBadges{ display:flex; gap:6px; }
+.qrBadge{
+  display:inline-block;
+  padding:3px 10px;
+  border-radius:9999px;
+  font-size:0.75rem;
+  font-weight:600;
+  line-height:1.3;
+}
+
+/* REFER badge = แดง */
+.qrBadgeRefer{ background:#fee2e2; color:#b91c1c; }
+
+/* TYPE badge (FORM/อื่นๆ) = ฟ้า */
+.qrBadgeType{ background:#dbeafe; color:#1e3a8a; }
+
+.qrMeta{
+  font-size:0.85rem;
+  color:#6b7280;
+  margin-bottom:6px;
+}
+
+.qrDetail{
+  font-size:0.92rem;
+  color:#111827;
+  line-height:1.5;
+}
+
+/* ===== QR item (layout แบบรูปตัวอย่าง) ===== */
+.qrHeaderLine{
+  display:flex; align-items:center; gap:10px;
+  margin-bottom:6px;
+}
+.qrIndexBox{
+  display:inline-flex; align-items:center; justify-content:center;
+  width:24px; height:24px; border-radius:6px;
+  background:#198754; color:#fff; font-weight:700; font-size:.95rem;
+  flex-shrink:0;
+}
+.qrTitleText{
+  font-weight:700; color:#0f172a; font-size:1.05rem;
+}
+
+.qrTypeLine{ margin:2px 0 6px; }
+.qrTypeBadge{
+  display:inline-block; padding:3px 10px; border-radius:9999px;
+  background:#dbeafe; color:#1e3a8a; font-weight:700; font-size:.78rem;
+}
+
+.qrTimeLine{
+  color:#6b7280; font-size:.95rem; margin-bottom:6px;
+}
+
+.qrInfoLine{
+  font-size:.95rem; color:#0f172a; line-height:1.5;
+}
+.dotSep{ color:#64748b; margin:0 6px; }
+
+/* อาการแบบข้อความปกติ (เผื่อใช้ร่วม) */
+.symText{ color:#111827; font-size:0.92rem; }
+
+/* Note bubble */
+.noteBubble{
+  margin-top:6px; padding:.35rem .6rem; background:#fff8e6;
+  border:1px solid #ffe7b3; border-radius:8px; font-size:12px; color:#7a5d00;
+}
+
+/* แถว active */
+.activeRow{ outline:2px solid #cfe3ff; background:#f8fbff; }
+
 /* ---------- Utils ---------- */
 .block{ display:block; }
-.muted{ color:var(--muted); font-size:.92rem; }
+.muted{ color:#6b7280; font-size:.92rem; }
 .hr{ border:0; height:1px; background:linear-gradient(90deg,#e7ebf3,rgba(231,235,243,0)); margin:10px 0 14px; }
 .errorText{ color:#b91c1c; margin-top:8px; }
 .stickySearch{ position:sticky; top:12px; align-self:flex-end; z-index:2; }
 
-/* ---------- Case dropdown tweaks (full width & tidy) ---------- */
-.dropdownCase{ width:100%; max-width:100%; }
-.dropdownCase .comboButton{
-  display:flex; flex-direction:column; align-items:flex-start; gap:4px;
-  white-space:normal; overflow:visible;
-}
-.dropdownCase .comboMain{ white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
-.dropdownCase .comboSubs{ display:flex; gap:6px; flex-wrap:nowrap; overflow:hidden; }
-.dropdownCase .chip{ max-width:160px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.dropdownCase .comboPanel{ left:0; right:auto; width:100%; max-width:100%; padding-top:8px; }
-.dropdownCase .comboSearchRow{ position:sticky; top:0; z-index:1; background:#fff; }
-
-/* ---------- Responsive: mobile ---------- */
+/* =========================
+   Responsive
+   ========================= */
 @media (max-width:640px){
   .row{ gap:10px; }
   .field,.btn{ min-height:44px; font-size:1rem; }
 
-  /* แถวบน: ปุ่มยืดเต็ม */
   .rightEnd{ justify-self:stretch; }
   .btnTop{ width:100% !important; }
 
-  /* ช่อง input ยืดเต็ม */
   #cidInput.field, #rangeSelect.field, #startDate.field, #endDate.field,
   .field[name="start_date"], .field[name="end_date"]{
     width:100% !important; max-width:100% !important; margin-left:0 !important;
   }
 
-  /* แถววันที่แตก 1 คอลัมน์ */
   .filtersRowDates{ grid-template-columns:1fr; }
   .filtersRowDates .dateItem:not(:first-child){ margin-left:0; }
 }
 
-/* ปุ่มค้นหา */
-.btn.btnPrimary {
-  min-width: 120px;  /* ขยายความยาว */
-  justify-content: center;
-}
-
-.btnLabel {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-/* ให้ select ที่มีไอคอนซ้าย เหลือที่ว่างเพิ่ม (iPad ชอบไม่กิน padding เท่า input) */
-.inputWithIcon select.field {
-  padding-left: 46px;            /* เดิม ~36–38px → ขยับเป็น 46px */
-}
-
-/* กันลูกศรขวาทับข้อความ และบังคับลูกศรของเราเอง */
+/* =========================
+   Select with left icon tweaks (iPad friendly)
+   ========================= */
+.inputWithIcon select.field{ padding-left:46px; }
 select.field{
-  -webkit-appearance: none;
-  appearance: none;
-  padding-right: 40px;           /* เผื่อที่ให้ลูกศรขวา */
-  background-origin: content-box;/* ให้ไอคอนขวาอยู่ในพื้นที่ padding อย่างถูกต้อง */
-  background-repeat: no-repeat;
-  background-position: right 10px center;
-  background-size: 16px 16px;
+  -webkit-appearance:none; appearance:none;
+  padding-right:40px;
+  background-origin:content-box;
+  background-repeat:no-repeat;
+  background-position:right 10px center;
+  background-size:16px 16px;
 }
 
-/* บน iPad/Safari บางรุ่น ต้องเผื่อซ้ายเพิ่มอีกนิด */
-@supports (-webkit-touch-callout: none) {
-  .inputWithIcon select.field {
-    padding-left: 50px;          /* เฉพาะ Safari/iPad เพิ่มอีกเล็กน้อย */
+/* =========================
+   iPad Responsive — Portrait (768–834px)
+   วางต่อท้ายไฟล์นี้ได้เลย
+   ========================= */
+
+/* 1) iPad Landscape/เล็กลงมาหน่อย */
+@media (max-width: 1024px) {
+  .container { padding: 16px 16px 24px; }
+  .table thead th, .table tbody td { padding: 10px; }
+  .pageTitle { font-size: 1.15rem; }
+}
+
+/* 2) iPad Portrait (Air/Pro 11) 834px และ 820px */
+@media (max-width: 834px) {
+  /* แถวบน: CID | ช่วงเวลา | ปุ่มค้นหา → 2 คอลัมน์ */
+  .filtersRowTop {
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
   }
+  /* บังคับคอลัมน์ให้ไหลเป็น 2 ช่อง */
+  .filtersRowTop .col4,
+  .filtersRowTop .col3,
+  .filtersRowTop .col5 { grid-column: auto / span 1; }
+
+  /* ปุ่มค้นหาเต็มแถวด้านขวา (ดูเป็นระเบียบ) */
+  .rightEnd { justify-self: end; }
+  .btnTop { width: 100% !important; min-width: 0; }
+
+  /* ช่องกรอกต่างๆ ให้ยืดเต็ม */
+  #cidInput.field,
+  #rangeSelect.field { width: 100% !important; max-width: 100% !important; margin-left: 0; }
+
+  /* ระยะซ้ายของ range ให้หายไปในแนวตั้ง */
+  .rangeCol { padding-left: 0; }
+
+  /* แถวล่าง: วันที่เริ่ม/สิ้นสุด → 2 คอลัมน์เท่ากัน */
+  .filtersRowDates { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .filtersRowDates .dateItem:not(:first-child) { margin-left: 0; }
+
+  /* date input กว้างเต็ม */
+  #startDate.field,
+  #endDate.field,
+  .field[name="start_date"],
+  .field[name="end_date"] {
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    margin-left: 0 !important;
+  }
+
+  /* Dropdown panel สูงตามจอ */
+  .comboPanel { max-height: 60vh; overflow: auto; }
+  .comboList { max-height: calc(60vh - 60px); }
+
+  /* ปุ่ม … ให้แตะง่ายขึ้น */
+  .menuBtn { padding: 8px; }
+  .menuDot { width: 5px; height: 5px; }
+
+  /* ตาราง: ให้แถวไม่แน่นเกิน + อนุญาตขึ้นบรรทัด */
+  .table tbody td { white-space: normal; word-break: break-word; }
+  .tdTags .chip { max-width: 200px; }
 }
 
-/* กันไอคอนซ้ายไม่ให้บังคลิก */
-.inputIcon { pointer-events: none; }
+/* 3) iPad Mini / 768px */
+@media (max-width: 768px) {
+  /* แถวบน → 2 คอลัมน์เหมือนเดิม แต่ลดช่องว่าง */
+  .filtersRowTop { gap: 10px; }
+  .label { font-size: .92rem; }
 
+  /* ปรับขนาดฟ้อนต์ในตารางให้อ่านง่าย */
+  .table thead th { font-size: .95rem; padding: 10px; }
+  .table tbody td { font-size: .94rem; padding: 9px 10px; }
+
+  /* ชิปเล็กลงนิดเพื่อไม่ล้น */
+  .chip { font-size: 12px; padding: 2px 8px; }
+  .chipSm { font-size: 11px; padding: 1px 6px; }
+  .badgeMore { font-size: 11px; padding: 0 .35rem; }
+
+  /* รายการ question results */
+  .qrItem { padding: 10px 12px; }
+  .qrIndex { width: 26px; height: 26px; font-size: .9rem; }
+  .qrTitle { font-size: .98rem; }
+}
+
+/* 4) ซูมลงมือถือ (<640px) — ใช้ของเดิมที่คุณมีอยู่แล้ว */
+
+.sepDot { color:#9aa3af; margin:0 6px; }
+.badgeMore {
+  background:#dbeafe; color:#1e40af;
+  border-radius:9999px; padding:2px 8px;
+  font-size:12px; font-weight:600; flex-shrink:0;
+}
+.tagRow { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
