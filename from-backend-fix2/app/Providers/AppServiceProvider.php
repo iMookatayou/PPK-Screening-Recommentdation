@@ -9,6 +9,16 @@ use Illuminate\Cache\RateLimiting\Limit;
 
 class AppServiceProvider extends ServiceProvider
 {
+    public function register(): void
+    {
+        // โหลดเฉพาะตอน dev/test เท่านั้น เพื่อไม่พังใน production (ไม่มี dev deps)
+        if ($this->app->environment('local', 'testing')) {
+            if (class_exists(\Laravel\Pail\PailServiceProvider::class)) {
+                $this->app->register(\Laravel\Pail\PailServiceProvider::class);
+            }
+        }
+    }
+
     public function boot(): void
     {
         // ----- ล็อกอิน -----
@@ -27,7 +37,7 @@ class AppServiceProvider extends ServiceProvider
             ];
         });
 
-        // ----- สมัครสมาชิก (ถ้าใช้) -----
+        // ----- สมัครสมาชิก -----
         RateLimiter::for('auth-register', function (Request $request) {
             return [
                 Limit::perMinute(5)->by($request->ip())

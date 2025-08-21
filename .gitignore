@@ -1,39 +1,51 @@
-# --- Laravel (backend) ---
+# =========================
+# --- Laravel (backend)
+# =========================
 /vendor/
-/node_modules/
-/public/storage
-/storage/*.key
-/storage/framework/*
-/storage/logs/*
-/bootstrap/cache/*
+node_modules/
+public/storage
+storage/*.key
+storage/framework/*
+storage/logs/*
+bootstrap/cache/*
 .env
 .env.local
 .env.*.backup
 
-# --- Laravel testing / coverage ---
-/coverage/
-/phpunit.xml.cache
+# Laravel test & coverage
+coverage/
+phpunit.xml.cache
+.phpunit.result.cache
+.php-cs-fixer.cache
 
-# --- Next.js (frontend) ---
+# =========================
+# --- Next.js (frontend)
+# =========================
 /from-frontend/node_modules/
 /from-frontend/.next/
 /from-frontend/out/
 /from-frontend/.turbo/
 /from-frontend/.vercel/
-/from-frontend/.env.local
-/from-frontend/.env.development.local
-/from-frontend/.env.test.local
-/from-frontend/.env.production.local
 
-# --- IDE & OS ---
+# Frontend env files (ignore local, allow example)
+from-frontend/.env
+from-frontend/.env.*
+!from-frontend/.env.frontend.example
+
+# =========================
+# --- IDE & OS junk
+# =========================
 .vscode/
 .idea/
 *.iml
 .DS_Store
 Thumbs.db
 
-# --- Misc ---
+# =========================
+# --- Logs
+# =========================
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+*.log

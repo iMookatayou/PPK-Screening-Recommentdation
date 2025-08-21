@@ -1,24 +1,19 @@
-version: "3.8"
-
 services:
   backend:
-    # ใช้ image ที่เตรียมไว้ (offline) — ถ้าอยาก build เอง ให้ลบบรรทัดนี้แล้วใส่ build: แทน
-    image: form27ppk-backend:offline
-    # ถ้าจะ build แทนการใช้ image ให้ใช้บล็อกนี้ (และลบบรรทัด image ด้านบน):
-    # build:
-    #   context: ./from-backend-fix2
-    #   dockerfile: Dockerfile
-
+    build:
+      context: ./from-backend-fix2
+      dockerfile: Dockerfile
     env_file:
-      - ./from-backend-fix2/.env.backend    # ต้องมี APP_PORT=4002 อยู่ในไฟล์นี้
+      - ./from-backend-fix2/.env.backend     # ต้องมี APP_PORT=4002, DB, APP_KEY
     environment:
       TZ: Asia/Bangkok
     ports:
-      - "4002:4002"                          # map พอร์ตคงที่ (ไม่อาศัย root .env)
+      - "4002:4002"
     volumes:
       - ./from-backend-fix2/storage:/app/storage
-      - ./from-backend-fix2/bootstrap/cache:/app/bootstrap/cache
       - ./from-backend-fix2/.env.backend:/app/.env:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks: [ app-net ]
     restart: unless-stopped
 
@@ -27,12 +22,12 @@ services:
       context: ./from-frontend
       dockerfile: Dockerfile
     env_file:
-      - ./from-frontend/.env.frontend        # ต้องมี PORT=4001 และ NEXT_PUBLIC_* ต่างๆ
+      - ./from-frontend/.env.frontend        # ต้องมี PORT=4001 และ NEXT_PUBLIC_*
     environment:
       NODE_ENV: production
       TZ: Asia/Bangkok
     ports:
-      - "4001:4001"                          # map พอร์ตคงที่ (ไม่อาศัย root .env)
+      - "4001:4001"
     depends_on: [ backend ]
     networks: [ app-net ]
     restart: unless-stopped

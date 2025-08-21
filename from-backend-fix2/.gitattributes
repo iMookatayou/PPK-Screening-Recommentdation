@@ -1,11 +1,32 @@
+# =============================
+# Line endings
+# =============================
+# ใช้ LF เป็นมาตรฐาน (กันปัญหา CRLF/LF เวลา cross-platform)
 * text=auto eol=lf
 
+# =============================
+# Diff settings (syntax highlight บน GitHub)
+# =============================
 *.blade.php diff=html
-*.css diff=css
-*.html diff=html
-*.md diff=markdown
-*.php diff=php
+*.css       diff=css
+*.html      diff=html
+*.md        diff=markdown
+*.php       diff=php
+*.js        diff=javascript
+*.ts        diff=javascript
+*.tsx       diff=javascript
+*.json      diff=json
+*.yml       diff=yaml
+*.yaml      diff=yaml
+*.sh        diff=sh
+*.dockerignore diff=gitignore
+*.gitignore diff=gitignore
 
-/.github export-ignore
-CHANGELOG.md export-ignore
-.styleci.yml export-ignore
+# =============================
+# Export-ignore (ไฟล์ไม่ต้องติดไปกับ release tarballs)
+# =============================
+/.github        export-ignore
+CHANGELOG.md    export-ignore
+.styleci.yml    export-ignore
+docker-compose*.yml export-ignore
+Dockerfile      export-ignore

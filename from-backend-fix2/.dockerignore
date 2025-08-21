@@ -1,23 +1,24 @@
-# ===== Secrets & env =====
+# ===== Secrets & env (ห้าม bake) =====
 .env
 .env.*
 !.env.example
 
-# ===== Git =====
+# ===== Git / VCS =====
 .git
 .git/*
 .github
 .gitattributes
 .gitignore
 
-# ===== Composer =====
+# ===== Composer vendor (ให้ composer ติดตั้งใน image) =====
 /vendor
 composer.phar
 
-# ===== Node (หากมีของติดมาปะปน) =====
+# ===== Node (ถ้ามีปะปน) =====
 node_modules
 npm-debug.log*
 pnpm-debug.log*
+yarn-error.log*
 *.log
 
 # ===== IDE / Editor =====
@@ -30,7 +31,7 @@ pnpm-debug.log*
 .DS_Store
 Thumbs.db
 
-# ===== Laravel runtime files =====
+# ===== Laravel runtime (ไม่ต้องส่งขึ้น build context) =====
 /storage/logs/*
 /storage/app/*
 /storage/framework/cache/*
@@ -38,26 +39,34 @@ Thumbs.db
 /storage/framework/testing/*
 /storage/framework/views/*
 
-# เก็บไฟล์ placeholder ของ git เอาไว้
+# (คงโครงสร้างโฟลเดอร์ไว้)
+!/storage/
 !/storage/.gitignore
+!/storage/app/
 !/storage/app/.gitignore
+!/storage/logs/
 !/storage/logs/.gitignore
+!/storage/framework/
 !/storage/framework/.gitignore
+!/storage/framework/cache/
 !/storage/framework/cache/.gitignore
+!/storage/framework/sessions/
 !/storage/framework/sessions/.gitignore
+!/storage/framework/views/
 !/storage/framework/views/.gitignore
 
 # ===== Bootstrap cache =====
 /bootstrap/cache/*
+!/bootstrap/cache/
 !/bootstrap/cache/.gitignore
 
-# ===== Public build/runtime =====
+# ===== Public artifacts =====
 /public/storage
 /public/hot
 /public/build
 /public/mix-manifest.json
 
-# ===== Tests & docs (ลดขนาด context) =====
+# ===== Tests & docs (ไม่จำเป็นตอน build) =====
 /tests
 phpunit.xml
 phpunit.xml.dist
@@ -77,7 +86,7 @@ coverage
 *.sqlite
 *.sqlite-journal
 
-# ===== Keys / certs (กันเผลอ bake ลง image) =====
+# ===== Keys / certs =====
 *.pem
 *.key
 id_rsa*

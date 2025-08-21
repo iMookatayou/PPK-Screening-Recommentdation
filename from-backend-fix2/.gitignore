@@ -1,27 +1,84 @@
-*.log
-.DS_Store
+# ===== Secrets & env =====
 .env
-.env.backup
-.env.production
-.phpactor.json
-.phpunit.result.cache
-/.fleet
-/.idea
-/.nova
-/.phpunit.cache
-/.vscode
-/.zed
-/auth.json
-/node_modules
-/public/build
-/public/hot
-/public/storage
-/storage/*.key
-/storage/pail
+.env.*
+!.env.example
+
+# ===== Git =====
+.git
+.git/*
+.github
+.gitattributes
+.gitignore
+
+# ===== Composer =====
 /vendor
-Homestead.json
-Homestead.yaml
+composer.phar
+
+# ===== Node (หากมีของติดมาปะปน) =====
+node_modules
+npm-debug.log*
+pnpm-debug.log*
+yarn-error.log*
+*.log
+
+# ===== IDE / Editor =====
+.vscode
+.idea
+*.sublime-project
+*.sublime-workspace
+
+# ===== OS junk =====
+.DS_Store
 Thumbs.db
 
-# เพิ่มบรรทัดนี้เพื่อให้ docker/entrypoint.sh ถูก copy เข้า image
-!docker/**
+# ===== Laravel runtime files =====
+/storage/logs/*
+/storage/app/*
+/storage/framework/cache/*
+/storage/framework/sessions/*
+/storage/framework/testing/*
+/storage/framework/views/*
+
+# เก็บไฟล์ placeholder ของ git เอาไว้
+!/storage/.gitignore
+!/storage/app/.gitignore
+!/storage/logs/.gitignore
+!/storage/framework/.gitignore
+!/storage/framework/cache/.gitignore
+!/storage/framework/sessions/.gitignore
+!/storage/framework/views/.gitignore
+
+# ===== Bootstrap cache =====
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# ===== Public build/runtime =====
+/public/storage
+/public/hot
+/public/build
+/public/mix-manifest.json
+
+# ===== Tests & docs (ลดขนาด repo) =====
+/tests
+phpunit.xml
+phpunit.xml.dist
+phpstan.neon*
+psalm.xml*
+/docs
+README.md
+
+# ===== Coverage / temp =====
+coverage
+.phpunit.result.cache
+.php-cs-fixer.cache
+*.cache
+/tmp
+/tmp/*
+*.sql
+*.sqlite
+*.sqlite-journal
+
+# ===== Keys / certs =====
+*.pem
+*.key
+id_rsa*
