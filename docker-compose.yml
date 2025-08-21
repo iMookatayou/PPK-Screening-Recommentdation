@@ -1,56 +1,36 @@
+# docker-compose.b.yml
+version: "3.8"
+
 services:
   backend:
     container_name: backend
     build:
       context: ./from-backend-fix2
       dockerfile: Dockerfile
+      args:
+        # ปรับได้ผ่าน .env หากต้องการ
+        APT_MIRROR: ${APT_MIRROR:-deb.debian.org}
+        PACKAGIST: ${PACKAGIST:-https://packagist.org}
+        http_proxy:  ${HTTP_PROXY-}
+        https_proxy: ${HTTPS_PROXY-}
+        no_proxy:    ${NO_PROXY-}
     env_file: [ ./.env ]
     environment:
       TZ: ${TZ:-Asia/Bangkok}
       APP_ENV: ${APP_ENV:-local}
-      # ส่งพอร์ตให้ artisan serve ใช้
       APP_PORT: ${BACKEND_PORT}
+      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
+      RUN_SEEDER: ${RUN_SEEDER:-1}
     ports:
       - "${BACKEND_PORT}:${BACKEND_PORT}"
     volumes:
       - ./from-backend-fix2/storage:/app/storage
       - ./from-backend-fix2/bootstrap/cache:/app/bootstrap/cache
-      # ให้ Laravel เห็นไฟล์ .env ชัดเจน (อยู่ “นอก” container)
       - ./.env:/app/.env:ro
-    # รันเบาๆ + migrate/seed ถ้าถูกเปิดใน .env
-    entrypoint:
-      - /bin/sh
-      - -lc
-      - |
-        set -e
-        # ติดตั้ง vendor ถ้าหาย
-        if [ ! -f vendor/laravel/framework/src/Illuminate/Foundation/Application.php ]; then
-          COMPOSER_ALLOW_SUPERUSER=1 COMPOSER_MEMORY_LIMIT=-1 composer install --no-interaction --prefer-dist
-        fi
-        COMPOSER_ALLOW_SUPERUSER=1 composer dump-autoload -o || true
-
-        php artisan config:clear || true
-        php artisan cache:clear  || true
-        php artisan route:clear  || true
-        php artisan view:clear   || true
-
-        if [ "${RUN_MIGRATIONS:-1}" = "1" ]; then
-          php artisan migrate --force --no-interaction || true
-        fi
-        if [ "${RUN_SEEDER:-1}" = "1" ]; then
-          php artisan db:seed --force --no-interaction || true
-        fi
-
-        php artisan config:cache
-        php artisan route:cache
-        php artisan view:cache
-
-        echo "[backend] serve on 0.0.0.0:${APP_PORT}"
-        exec php artisan serve --host=0.0.0.0 --port="${APP_PORT}"
     extra_hosts:
-      # ทำให้คอนเทนเนอร์เรียก host.docker.internal ได้ (กันไว้ถ้าอนาคตสลับมาใช้)
       - "host.docker.internal:host-gateway"
     networks: [ app-net ]
+    restart: unless-stopped
 
   frontend:
     container_name: frontend
@@ -62,14 +42,15 @@ services:
       TZ: ${TZ:-Asia/Bangkok}
       NODE_ENV: development
       PORT: ${FRONTEND_PORT}
-    # ใช้ next dev เพื่อ hot reload
     command: ["npm","run","dev","--","--port","${FRONTEND_PORT}","--hostname","0.0.0.0"]
     ports:
       - "${FRONTEND_PORT}:${FRONTEND_PORT}"
     volumes:
       - ./from-frontend:/app
       - /app/node_modules
+    depends_on: [ backend ]
     networks: [ app-net ]
+    restart: unless-stopped
 
 networks:
   app-net:
