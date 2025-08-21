@@ -1,53 +1,38 @@
-# docker-compose.b.yml
 version: "3.8"
 
 services:
   backend:
-    container_name: backend
-    build:
-      context: ./from-backend-fix2
-      dockerfile: Dockerfile
-      args:
-        # ปรับได้ผ่าน .env หากต้องการ
-        APT_MIRROR: ${APT_MIRROR:-deb.debian.org}
-        PACKAGIST: ${PACKAGIST:-https://packagist.org}
-        http_proxy:  ${HTTP_PROXY-}
-        https_proxy: ${HTTPS_PROXY-}
-        no_proxy:    ${NO_PROXY-}
-    env_file: [ ./.env ]
+    # ใช้ image ที่เตรียมไว้ (offline) — ถ้าอยาก build เอง ให้ลบบรรทัดนี้แล้วใส่ build: แทน
+    image: form27ppk-backend:offline
+    # ถ้าจะ build แทนการใช้ image ให้ใช้บล็อกนี้ (และลบบรรทัด image ด้านบน):
+    # build:
+    #   context: ./from-backend-fix2
+    #   dockerfile: Dockerfile
+
+    env_file:
+      - ./from-backend-fix2/.env.backend    # ต้องมี APP_PORT=4002 อยู่ในไฟล์นี้
     environment:
-      TZ: ${TZ:-Asia/Bangkok}
-      APP_ENV: ${APP_ENV:-local}
-      APP_PORT: ${BACKEND_PORT}
-      RUN_MIGRATIONS: ${RUN_MIGRATIONS:-1}
-      RUN_SEEDER: ${RUN_SEEDER:-1}
+      TZ: Asia/Bangkok
     ports:
-      - "${BACKEND_PORT}:${BACKEND_PORT}"
+      - "4002:4002"                          # map พอร์ตคงที่ (ไม่อาศัย root .env)
     volumes:
       - ./from-backend-fix2/storage:/app/storage
       - ./from-backend-fix2/bootstrap/cache:/app/bootstrap/cache
-      - ./.env:/app/.env:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - ./from-backend-fix2/.env.backend:/app/.env:ro
     networks: [ app-net ]
     restart: unless-stopped
 
   frontend:
-    container_name: frontend
     build:
       context: ./from-frontend
       dockerfile: Dockerfile
-    env_file: [ ./.env ]
+    env_file:
+      - ./from-frontend/.env.frontend        # ต้องมี PORT=4001 และ NEXT_PUBLIC_* ต่างๆ
     environment:
-      TZ: ${TZ:-Asia/Bangkok}
-      NODE_ENV: development
-      PORT: ${FRONTEND_PORT}
-    command: ["npm","run","dev","--","--port","${FRONTEND_PORT}","--hostname","0.0.0.0"]
+      NODE_ENV: production
+      TZ: Asia/Bangkok
     ports:
-      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
-    volumes:
-      - ./from-frontend:/app
-      - /app/node_modules
+      - "4001:4001"                          # map พอร์ตคงที่ (ไม่อาศัย root .env)
     depends_on: [ backend ]
     networks: [ app-net ]
     restart: unless-stopped
