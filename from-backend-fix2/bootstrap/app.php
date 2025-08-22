@@ -13,23 +13,24 @@ use App\Http\Middleware\EnsureTablesExist;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web: __DIR__.'/../routes/web.php',
-        api: __DIR__.'/../routes/api.php',
-        commands: __DIR__.'/../routes/console.php',
+        web: __DIR__ . '/../routes/web.php',
+        api: __DIR__ . '/../routes/api.php',
+        commands: __DIR__ . '/../routes/console.php',
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        // ตั้งชื่อสั้น ๆ
+        // Alias
         $middleware->alias([
-            'db.tables' => EnsureTablesExist::class,
-            'manualTokenAuth' => \App\Http\Middleware\ManualTokenAuth::class,
+            'db.tables'        => EnsureTablesExist::class,
+            'manualTokenAuth'  => \App\Http\Middleware\ManualTokenAuth::class,
             'token.expiration' => \App\Http\Middleware\TokenExpirationCheck::class,
-            'role' => \App\Http\Middleware\RoleMiddleware::class,
+            'role'             => \App\Http\Middleware\RoleMiddleware::class,
         ]);
 
-        /**
-         * - สำหรับ CORS และ Session Management
-         */
+        // <<< สำคัญ: ให้ตรวจตารางก่อนเสมอสำหรับทุกเส้นทางในกลุ่ม API >>>
+        $middleware->prependToGroup('api', 'db.tables');
+
+        // CORS / Session (ถ้าจำเป็นต้องใช้)
         $middleware->append([
             HandleCors::class,
             StartSession::class,
@@ -38,6 +39,6 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        // สามารถเพิ่ม custom exception handler ได้ที่นี่
+        // custom exception handler (ถ้ามี)
     })
     ->create();

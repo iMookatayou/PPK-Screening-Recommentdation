@@ -1,18 +1,25 @@
 'use client'
 
-import React, { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react'
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  createContext,
+  useContext,
+  type ReactNode,
+} from 'react'
 import { usePathname } from 'next/navigation'
+import { motion, AnimatePresence } from 'framer-motion'
+import { createPortal } from 'react-dom'
 import TopNavbar from './components/topbar/TopNavbar'
 import Sidebar from './components/sidebar/Sidebar'
 import type { ThaiIDData } from '@/app/types/globalType'
 
-/** ENV เป็น string | undefined เสมอ -> guard เวลาใช้งาน */
-const CARD_API = process.env.NEXT_PUBLIC_CARD_API
+/** ========= Config ========= */
+const CARD_API = process.env.NEXT_PUBLIC_CARD_API // string | undefined
 const CHECK_INTERVAL = 3000
 
-/* =============================
-   ThaiID Context
-   ============================= */
+/** ========= ThaiID Context ========= */
 type ReaderStatus = 'reading' | 'ready' | 'error'
 
 const ThaiIDContext = createContext<{
@@ -35,9 +42,7 @@ const ThaiIDContext = createContext<{
 
 export const useThaiID = () => useContext(ThaiIDContext)
 
-/* =============================
-   Provider
-   ============================= */
+/** ========= Provider ========= */
 export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
   const [data, setData] = useState<ThaiIDData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -85,12 +90,14 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
       const jsonText = text.replace(/^\/\*\*\/cb\((.*)\);?$/, '$1')
       const card = JSON.parse(jsonText)
 
+      // ยังไม่เสียบบัตร
       if (!card || !card.CitizenID) {
         setLoading(false)
         setStatus('reading')
         return
       }
 
+      // กันอัพเดตรัวๆ ซ้ำบัตรเดิม
       if (card.CitizenID === lastCID.current) {
         setLoading(false)
         setStatus('ready')
@@ -136,7 +143,7 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
 
   const startCardReading = () => {
     cleanup()
-    fetchCardData()
+    fetchCardData() // ดึงครั้งแรกทันที
     intervalRef.current = setInterval(fetchCardData, CHECK_INTERVAL)
   }
 
@@ -154,83 +161,197 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
   )
 }
 
-/* =============================
-   UI: Card Reader Status Toast
-   ============================= */
+/** ========= Helpers ========= */
 function maskCID(cid: string) {
   if (!cid || cid.length < 13) return cid
   return `${cid.slice(0, 1)}-${'*'.repeat(7)}-${cid.slice(8, 10)}-${'*'.repeat(3)}-${cid.slice(12)}`
 }
-
 function formatTime(ts: number | null) {
   if (!ts) return ''
   const d = new Date(ts)
   return d.toLocaleString('th-TH', { hour12: false })
 }
+function toDataUrlMaybe(base64?: string | null) {
+  if (!base64) return null
+  const s = base64.trim()
+  return s ? (s.startsWith('data:image') ? s : `data:image/jpeg;base64,${s}`) : null
+}
+
+/** ========= Portal Utils (fix bottom-right positioning) ========= */
+function useMounted() {
+  const [m, setM] = useState(false)
+  useEffect(() => setM(true), [])
+  return m
+}
+function Portal({ children }: { children: ReactNode }) {
+  const mounted = useMounted()
+  if (!mounted) return null
+  return createPortal(children, document.body)
+}
+
+/** ========= Motion Card + FAB (bottom-right) via Portal ========= */
+const STORAGE_KEY = 'cardStatusCollapsed'
 
 const CardReaderStatus: React.FC = () => {
   const { data, status, error, lastUpdatedAt, refreshCardData } = useThaiID()
+  const [collapsed, setCollapsed] = useState(false)
 
-  let bg = 'bg-gray-700'
-  let border = 'border-gray-600'
-  let text = 'กำลังอ่านบัตรประชาชน...'
-  let icon = (
-    <svg className="size-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
-      <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4" />
-    </svg>
-  )
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY)
+      if (raw) setCollapsed(raw === '1')
+    } catch {}
+  }, [])
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0')
+    } catch {}
+  }, [collapsed])
 
-  if (status === 'ready' && data) {
-    bg = 'bg-green-600'
-    border = 'border-green-700'
-    text = `${data.titleNameTh}${data.firstNameTh} ${data.lastNameTh} • ${maskCID(data?.cid ?? '')}`
-    icon = (
-      <svg className="size-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path d="M20 6L9 17l-5-5" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
+  // โทนสีตามสถานะ
+  const tone = {
+    bg: status === 'ready' ? 'bg-green-600' : status === 'error' ? 'bg-red-600' : 'bg-gray-700',
+    border: status === 'ready' ? 'border-green-700' : status === 'error' ? 'border-red-700' : 'border-gray-600',
+    ring: status === 'ready' ? 'ring-green-400/50' : status === 'error' ? 'ring-red-400/50' : 'ring-white/20',
+    fab: status === 'ready' ? 'bg-green-600 hover:bg-green-700' : status === 'error' ? 'bg-red-600 hover:bg-red-700' : 'bg-gray-700 hover:bg-gray-800',
   }
 
-  if (status === 'error') {
-    bg = 'bg-red-600'
-    border = 'border-red-700'
-    icon = (
-      <svg className="size-4" viewBox="0 0 24 24" fill="none" aria-hidden>
-        <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    )
-  }
+  const photoUrl = toDataUrlMaybe(data?.photo)
+  const text =
+    status === 'ready' && data
+      ? `${data.titleNameTh}${data.firstNameTh} ${data.lastNameTh} • ${maskCID(data?.cid ?? '')}`
+      : 'กำลังอ่านบัตรประชาชน...'
 
-  return (
-    <div className="fixed bottom-4 right-4 z-[120]">
-      <div className={`flex items-start gap-3 text-white ${bg} border ${border} shadow-lg rounded-xl p-3 min-w-[280px] max-w-[420px]`}>
-        <div className="mt-1">{icon}</div>
-        <div className="flex-1">
-          <div className="font-medium leading-tight">{text}</div>
-          <div className="text-white/80 text-xs mt-0.5">
-            {status === 'ready' && lastUpdatedAt ? `อัปเดตล่าสุด: ${formatTime(lastUpdatedAt)}` : null}
-            {status === 'reading' ? 'โปรดเสียบบัตร หรือรอระบบอ่านข้อมูล' : null}
-            {status === 'error' && (error || 'เกิดข้อผิดพลาดในการอ่านบัตร')}
-          </div>
-        </div>
-        <div className="flex gap-2">
-          <button
-            onClick={refreshCardData}
-            className="rounded-lg border border-white/30 px-2 py-1 text-xs hover:bg-white/10 active:scale-[0.98] transition"
-            title="รีเฟรชการอ่านบัตร"
-          >
-            รีเฟรช
-          </button>
+  // วงกลมรูป (avatar) พร้อม motion
+  const Avatar = (
+    <div className="relative shrink-0">
+      <div className={`rounded-full p-[2px] ring-4 ${tone.ring}`}>
+        <div className="rounded-full overflow-hidden bg-black/20 size-10 grid place-items-center">
+          <AnimatePresence mode="wait" initial={false}>
+            {status === 'ready' && photoUrl ? (
+              <motion.img
+                key={`img-${lastUpdatedAt ?? 'x'}`}
+                src={photoUrl}
+                alt="card holder"
+                className="size-10 object-cover"
+                initial={{ opacity: 0, scale: 0.8, rotate: -6 }}
+                animate={{ opacity: 1, scale: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: 'spring', stiffness: 480, damping: 28 }}
+              />
+            ) : status === 'error' ? (
+              <motion.svg
+                key="warn"
+                viewBox="0 0 24 24"
+                className="h-6 w-6 text-white"
+                fill="none"
+                initial={{ opacity: 0, scale: 0.8 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: 'spring', stiffness: 480, damping: 28 }}
+              >
+                <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </motion.svg>
+            ) : (
+              <motion.svg
+                key="spinner"
+                viewBox="0 0 24 24"
+                className="h-6 w-6 text-white"
+                fill="none"
+                initial={{ opacity: 0, rotate: -30 }}
+                animate={{ opacity: 1, rotate: 0 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={{ type: 'spring', stiffness: 480, damping: 30 }}
+              >
+                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
+                <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" strokeWidth="4">
+                  <animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="0.9s" repeatCount="indefinite" />
+                </path>
+              </motion.svg>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
   )
+
+  return (
+    <Portal>
+      <div className="fixed bottom-4 right-4 z-[120]">
+        <AnimatePresence initial={false} mode="wait">
+          {/* FAB (ปุ่มกลม) — โผล่เมื่อพับ */}
+          {collapsed && (
+            <motion.button
+              key="fab"
+              type="button"
+              onClick={() => setCollapsed(false)}
+              className={`h-12 w-12 rounded-full ${tone.fab} text-white shadow-xl grid place-items-center`}
+              aria-label="เปิดสถานะผู้อ่านบัตร"
+              title="เปิดสถานะผู้อ่านบัตร"
+              initial={{ opacity: 0, scale: 0.8, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 8 }}
+              transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+            >
+              <div className={`rounded-full p-[2px] ring-4 ${tone.ring}`}>
+                <div className="rounded-full bg-white/20 size-9 grid place-items-center">
+                  <svg viewBox="0 0 24 24" className="h-5 w-5 text-white" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="5" width="18" height="14" rx="2" />
+                    <path d="M3 10h18" />
+                  </svg>
+                </div>
+              </div>
+            </motion.button>
+          )}
+
+          {/* Motion Card — โผล่เมื่อไม่พับ */}
+          {!collapsed && (
+            <motion.div
+              key="panel"
+              className={`flex items-center gap-3 text-white ${tone.bg} border ${tone.border} shadow-xl rounded-2xl p-3 min-w-[300px] max-w-[460px]`}
+              initial={{ opacity: 0, x: 40, y: 8, scale: 0.98 }}
+              animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
+              exit={{ opacity: 0, x: 50, y: 8, scale: 0.98 }}
+              transition={{ type: 'spring', stiffness: 360, damping: 26 }}
+              layout
+            >
+              {Avatar}
+
+              <div className="flex-1">
+                <div className="font-medium leading-tight line-clamp-1">{text}</div>
+                <div className="text-white/80 text-xs mt-0.5">
+                  {status === 'ready' && lastUpdatedAt ? `อัปเดตล่าสุด: ${formatTime(lastUpdatedAt)}` : null}
+                  {status === 'reading' ? 'โปรดเสียบบัตร หรือรอระบบอ่านข้อมูล' : null}
+                  {status === 'error' && (error || 'เกิดข้อผิดพลาดในการอ่านบัตร')}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={refreshCardData}
+                  className="rounded-lg border border-white/30 px-2 py-1 text-xs hover:bg-white/10 active:scale-[0.98] transition"
+                  title="รีเฟรชการอ่านบัตร"
+                >
+                  รีเฟรช
+                </button>
+                <button
+                  onClick={() => setCollapsed(true)}
+                  className="rounded-lg border border-white/30 px-2 py-1 text-xs hover:bg-white/10 active:scale-[0.98] transition"
+                  aria-label="ซ่อนแถบสถานะ"
+                  title="ซ่อนแถบสถานะ"
+                >
+                  ✕
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    </Portal>
+  )
 }
 
-/* =============================
-   Layout
-   ============================= */
+/** ========= Layout ========= */
 export default function ClientLayout({ children }: { children: React.ReactNode }) {
   const pathnameRaw = usePathname()
   const pathname = pathnameRaw ?? ''
@@ -239,30 +360,35 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   const [selected, setSelected] = useState<number[]>([])
   const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+  }, [])
   if (!mounted) return null
   if (isExcluded) return <>{children}</>
 
   return (
     <ThaiIDProvider>
+      {/* โครงหลัก */}
       <div className="min-h-screen flex flex-col bg-white">
+        {/* Topbar */}
         <div className="sticky top-0 z-[100]">
           <TopNavbar />
         </div>
 
         <div className="flex flex-1 overflow-hidden">
+          {/* Sidebar */}
           <aside className="w-[260px] shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto z-[90]">
             <Sidebar selected={selected} setSelected={setSelected} setShowRightPanel={() => {}} />
           </aside>
 
+          {/* Content */}
           <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[--background] text-[--foreground] p-4">
-            <div className="w-full max-w-none">
-              {children}
-            </div>
+            <div className="w-full max-w-none">{children}</div>
           </main>
         </div>
       </div>
 
+      {/* Status Card (fixed bottom-right via Portal) */}
       <CardReaderStatus />
     </ThaiIDProvider>
   )
