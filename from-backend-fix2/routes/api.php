@@ -1,6 +1,8 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Illuminate\Http\Request;
+
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FormPPKController;
 use App\Http\Controllers\ReferralGuidanceController;
@@ -21,10 +23,42 @@ Route::post('/login-token', [AuthController::class, 'login'])
 
 /*
 |--------------------------------------------------------------------------
+| Debug routes (ชั่วคราวไว้เทสบนเซิร์ฟเวอร์ที่เด้ง)
+|--------------------------------------------------------------------------
+| - /api/debug/headers จะบอกว่า Authorization header มาถึง Laravel ไหม
+| - /api/auth-ping ทดสอบผ่านกลุ่ม protected ว่า resolve user ได้จริงไหม
+*/
+Route::get('/debug/headers', function (Request $r) {
+    return response()->json([
+        'request_url' => $r->fullUrl(),
+        'auth_header' => $r->header('Authorization'),
+        'bearer'      => $r->bearerToken(),
+    ]);
+})->name('debug.headers');
+
+// เลือก guard จาก .env: API_GUARD=sanctum | manual
+$useSanctum = env('API_GUARD', 'manual') === 'sanctum';
+$protectedMiddlewares = $useSanctum
+    ? ['auth:sanctum']                          // ใช้ Sanctum (Bearer PAT)
+    : ['manualTokenAuth', 'token.expiration'];  // ใช้ middleware เดิมของคุณ
+
+/*
+|--------------------------------------------------------------------------
 | Protected Routes
 |--------------------------------------------------------------------------
 */
-Route::middleware(['manualTokenAuth', 'token.expiration'])->group(function () {
+Route::middleware($protectedMiddlewares)->group(function () use ($useSanctum) {
+
+    // Ping ทดสอบในกลุ่ม protected (จะผ่านต่อเมื่อ auth ถูกต้อง)
+    Route::get('/auth-ping', function (Request $r) {
+        $u = $r->user();
+        return response()->json([
+            'ok'    => (bool) $u,
+            'id'    => $u->id   ?? null,
+            'email' => $u->email?? null,
+        ]);
+    })->name('debug.auth_ping');
+
     // Auth
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/user', [AuthController::class, 'update']);
@@ -50,7 +84,7 @@ Route::middleware(['manualTokenAuth', 'token.expiration'])->group(function () {
     // Summary
     Route::get('/summary', [SummaryController::class, 'index']);
 
-    // Admin Only   
+    // Admin Only
     Route::middleware('role:admin')->prefix('admin')->group(function () {
         Route::get('/users', [AdminUserController::class, 'index']);
         Route::get('/users/pending', [AdminUserController::class, 'getPendingUsers']);

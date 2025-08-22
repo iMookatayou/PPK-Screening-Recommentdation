@@ -12,26 +12,26 @@ return new class extends Migration {
 
             $table->id();
 
-            // สร้างคอลัมน์ FK แต่ยังไม่ constrain ตอนนี้
+            // FK ไป patient_cases
             $table->unsignedBigInteger('patient_case_id')->index();
 
-            $table->string('case_id')->index();
+            $table->string('case_id', 64)->index();          // UUID / รหัสเคส
+            $table->string('question', 100);                 // เช่น StrokeSuspect
+            $table->string('question_key', 100);             // เช่น q6_uti
+            $table->integer('question_code');                // โค้ดตัวเลข
+            $table->string('question_title', 255);           // ข้อความเต็ม
 
-            $table->string('question');
-            $table->string('question_key');
-            $table->integer('question_code');
-            $table->string('question_title');
-
-            $table->json('clinic');
+            $table->json('clinic');                          // JSON array
             $table->json('symptoms')->nullable();
             $table->text('note')->nullable();
 
             $table->boolean('is_refer_case')->default(false);
-            $table->string('type')->default('form');
-            $table->string('routed_by')->nullable();
+            $table->string('type', 20)->default('form');     // 'form' หรือ 'guide'
+            $table->string('routed_by', 100)->nullable();    // user id/name
 
             $table->timestamps();
 
+            // ดัชนีเสริม
             $table->index(['type', 'created_at']);
         });
     }
