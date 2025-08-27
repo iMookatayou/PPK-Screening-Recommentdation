@@ -24,13 +24,20 @@ class QuestionResult extends Model
         'is_refer_case',
         'type',
         'routed_by',
-        'created_at',
-        'updated_at',
     ];
 
-    // ไม่ใช้ casts กับ clinic/symptoms เพราะเราคุมการ encode/decode เองเพื่อใส่ JSON_UNESCAPED_UNICODE
+    // ไม่ใช้ casts กับ clinic/symptoms เพราะคุม JSON เอง
     protected $casts = [
         'is_refer_case' => 'boolean',
+    ];
+
+    // Default ฝั่งแอป (แทน DEFAULT บน JSON ที่ MySQL 5.x ทำไม่ได้)
+    protected $attributes = [
+        'clinic'    => '[]',
+        'symptoms'  => '[]',
+        'note'      => '',
+        'type'      => 'form',
+        'routed_by' => '',
     ];
 
     /* -----------------------------
@@ -41,7 +48,6 @@ class QuestionResult extends Model
         return $this->belongsTo(PatientCase::class, 'patient_case_id');
     }
 
-    // (ออปชัน) เข้าถึงด้วย case_id (string)
     public function patientCaseByCode()
     {
         return $this->belongsTo(PatientCase::class, 'case_id', 'case_id');
@@ -50,74 +56,71 @@ class QuestionResult extends Model
     /* -----------------------------
      | Mutators / Accessors (UTF-8 JSON)
      * ----------------------------*/
-
-    /**
-     * Encode clinic เป็น JSON แบบไม่ escape unicode
-     */
     public function setClinicAttribute($value): void
     {
-        $this->attributes['clinic'] = $this->encodeUtf8JsonArray($value);
+        $this->attributes['clinic'] = $this->normalizeArrayToJson($value);
     }
 
-    /**
-     * คืน clinic เป็น array เสมอ
-     */
     public function getClinicAttribute($value): array
     {
         return $this->decodeJsonArray($value);
     }
 
-    /**
-     * Encode symptoms เป็น JSON แบบไม่ escape unicode
-     */
     public function setSymptomsAttribute($value): void
     {
-        $this->attributes['symptoms'] = $this->encodeUtf8JsonArray($value);
+        $this->attributes['symptoms'] = $this->normalizeArrayToJson($value);
     }
 
-    /**
-     * คืน symptoms เป็น array เสมอ
-     */
     public function getSymptomsAttribute($value): array
     {
         return $this->decodeJsonArray($value);
     }
 
+    // กัน note เป็น null → สตริงว่าง (ตารางห้าม NULL)
+    public function setNoteAttribute($value): void
+    {
+        $this->attributes['note'] = $value ?? '';
+    }
+
     /* -----------------------------
      | Helpers
      * ----------------------------*/
-
-    /**
-     * แปลงค่าให้เป็น array ของ string ที่สะอาด แล้ว encode เป็น JSON แบบ JSON_UNESCAPED_UNICODE
-     */
-    protected function encodeUtf8JsonArray($value): ?string
+    // รับ array / สตริง JSON / สตริงธรรมดา → เก็บเป็น JSON (ไม่ escape unicode) | ไม่คืน null
+    protected function normalizeArrayToJson($value): string
     {
-        if ($value === null) {
-            return null;
+        // null => []
+        if ($value === null) return '[]';
+
+        // ถ้าเป็นสตริง ลอง decode เป็น JSON ก่อน
+        if (is_string($value)) {
+            $decoded = json_decode($value, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $value = $decoded;
+            } else {
+                // ไม่ใช่ JSON → treat เป็น 1 ค่า
+                $value = [$value];
+            }
         }
 
-        // บังคับเป็น array ของ string และตัดช่องว่าง/ค่าว่างออก
-        $arr = is_array($value) ? $value : [$value];
+        // บังคับเป็น array ของ string, ตัดค่าว่าง, unique, reindex
         $arr = array_values(array_filter(array_map(function ($v) {
-            if (!is_string($v)) {
-                // แปลง non-string ให้เป็น string (เช่น int/bool)
-                $v = is_scalar($v) ? (string) $v : null;
-            }
-            $v = $v !== null ? trim($v) : null;
+            if (is_array($v) || is_object($v)) return null;
+            if (!is_string($v)) $v = is_scalar($v) ? (string)$v : null;
+            if ($v === null) return null;
+            $v = trim($v);
             return $v === '' ? null : $v;
-        }, $arr)));
+        }, (array)$value)));
 
-        return json_encode($arr, JSON_UNESCAPED_UNICODE);
+        $arr = array_values(array_unique($arr));
+
+        return json_encode($arr, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
-    /**
-     * decode JSON string → array (ว่างให้เป็น [])
-     */
+    // string(JSON) | array | null → array (ว่างให้เป็น [])
     protected function decodeJsonArray($value): array
     {
-        if ($value === null || $value === '') {
-            return [];
-        }
+        if (is_array($value)) return $value;
+        if ($value === null || $value === '') return [];
         $decoded = json_decode($value, true);
         return is_array($decoded) ? $decoded : [];
     }

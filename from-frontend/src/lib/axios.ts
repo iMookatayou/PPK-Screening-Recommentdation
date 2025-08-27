@@ -1,4 +1,3 @@
-// src/lib/axios.ts
 'use client';
 
 import axios, {
@@ -8,20 +7,22 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios';
 
-/* ---------------- Base URL ---------------- */
-// แนวคิด: ให้ตั้ง NEXT_PUBLIC_API_BASE_URL เป็น "รากของ API"
-// จะเป็น http://IP:9001 หรือ http://IP:9001/api ก็ได้ โค้ดนี้จะกัน /api ซ้ำให้
-function resolveBaseURL(): string {
+/* ---------------- Base URL: ใช้ ENV เท่านั้น และลงท้าย /api เสมอ ---------------- */
+function resolveApiBaseURL(): string {
   const raw = (process.env.NEXT_PUBLIC_API_BASE_URL || '').trim();
+
+  // ❌ ไม่ fallback ไป /api อีกแล้ว
   if (!raw) {
-    // ดีฟอลต์ให้เข้าถึง backend ตรงๆ ที่ :9001/api (แก้ให้ตรงสภาพแวดล้อมคุณได้)
-    return 'http://127.0.0.1:4002/api';
+    // โยน error ทันทีเพื่อให้รู้ว่า env ไม่ถูกฝังตอน build
+    throw new Error('NEXT_PUBLIC_API_BASE_URL is not defined in environment (.env of frontend).');
   }
-  // ตัด slash ท้าย
-  const noTrail = raw.replace(/\/+$/, '');
-  return noTrail;
+
+  // ตัดสแลชท้าย และตัด /api หนึ่งชั้นออกก่อน แล้วค่อยเติมกลับทีหลัง (กันซ้ำ)
+  const root = raw.replace(/\/+$/, '').replace(/\/api$/i, '');
+  return `${root}/api`;
 }
-const baseURL = resolveBaseURL();
+
+const baseURL = resolveApiBaseURL();
 
 /* --------------- Helpers --------------- */
 function ensureAxiosHeaders(config: InternalAxiosRequestConfig): AxiosHeaders {
@@ -41,8 +42,13 @@ function setJsonHeaders(config: InternalAxiosRequestConfig) {
   const headers = ensureAxiosHeaders(config);
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
 
+  const method = (config.method || 'get').toLowerCase();
+  const safeNoBody =
+    (method === 'get' || method === 'head' || method === 'delete') && !config.data;
+
   const isForm = typeof FormData !== 'undefined' && config.data instanceof FormData;
-  if (!headers.has('Content-Type') && !isForm) {
+
+  if (!headers.has('Content-Type') && !isForm && !safeNoBody) {
     headers.set('Content-Type', 'application/json');
   }
 }
@@ -65,11 +71,11 @@ function normalizeAxiosError(error: AxiosError) {
   const code = server?.error_code;
 
   if (serverMsg && typeof serverMsg === 'string') {
-    error.message = serverMsg;
+    (error as any).message = serverMsg;
   } else if (error.code === 'ECONNABORTED') {
-    error.message ||= 'คำขอหมดเวลา กรุณาลองใหม่';
+    (error as any).message ||= 'คำขอหมดเวลา กรุณาลองใหม่';
   } else if (error.message === 'Network Error') {
-    error.message = 'เครือข่ายมีปัญหา หรือเซิร์ฟเวอร์ไม่ตอบสนอง';
+    (error as any).message = 'เครือข่ายมีปัญหา หรือเซิร์ฟเวอร์ไม่ตอบสนอง';
   }
 
   (error as any).error_code = code ?? (error as any).error_code;
@@ -89,60 +95,32 @@ export function withNoCache(url: string): string {
   }
 }
 
-/* ===== Utilities: ทำ path ให้ปลอดภัยเรื่อง /api ซ้ำ ===== */
-function extractBaseApiPath(burl: string): string {
-  try {
-    const u = new URL(burl);
-    return u.pathname.replace(/\/+$/, ''); // เช่น '' | '/' | '/api'
-  } catch {
-    // baseURL อาจเป็น relative (ไม่ควร แต่กันไว้)
-    return '';
-  }
-}
-
-/**
- * ให้ผลลัพธ์เป็น path ที่ "relative ต่อราก API"
- * - ตัด /api ออก 1 ชั้น ถ้า url เริ่มด้วย /api
- * - ถ้า baseURL เองลงท้ายด้วย /api และ url ก็เริ่มด้วย /api → จะตัดซ้ำชนกันออก
- */
-function normalizeToApiRelativePath(url: string): string {
-  // แปลงเป็น path (รองรับทั้ง absolute และ relative)
+/* ===== Utilities: ทำ path ให้เป็น “API-relative” เสมอ ===== */
+function toApiRelativePath(url: string | undefined): string | undefined {
+  if (!url) return url;
   let path: string;
   try {
     const u = new URL(url, 'http://x/');
-    path = u.pathname;
+    path = u.pathname + (u.search || '');
   } catch {
     path = url.startsWith('/') ? url : `/${url}`;
   }
-  // ให้เหลือ slash เดียวหน้า
-  path = '/' + path.replace(/^\/+/, '');
-
-  // basePath เช่น '' | '/' | '/api'
-  const basePath = extractBaseApiPath(baseURL) || '';
-  const baseIsApi = basePath === '/api';
-
-  // ตัด /api ออกจาก path ถ้าซ้ำกับ base
-  // กรณีทั่วไป: baseURL ลงท้าย /api แล้ว config.url ก็เขียน /api/... → เอา /api ของ url ออก
-  if (baseIsApi && path.startsWith('/api/')) {
-    return path.replace(/^\/api\//, '/');
-  }
-  // ถ้า base ไม่ใช่ /api แต่ url เขียน /api/... → ถือว่าอยากเข้าราก /api → คงไว้
+  // baseURL ลงท้าย /api อยู่แล้ว → ลอก /api ออกถ้าเผลอใส่มา
+  path = path.replace(/^\/api(\/|$)/i, '/');
   return path;
 }
 
 /* -------- Public instance -------- */
 export const api: AxiosInstance = axios.create({
-  baseURL, // อาจจะจบที่ ...:9001 หรือ ...:9001/api ก็ได้
+  baseURL, // จบที่ ...:4002/api เสมอ (มาจาก ENV เท่านั้น)
   timeout: 15000,
 });
 
 api.interceptors.request.use(
   (config) => {
     setJsonHeaders(config);
-    // กัน /api ซ้ำสำหรับทุกคำขอ
     if (typeof config.url === 'string') {
-      const normalized = normalizeToApiRelativePath(config.url);
-      config.url = normalized;
+      config.url = toApiRelativePath(config.url);
     }
     return config;
   },
@@ -183,48 +161,31 @@ export function dropToken() {
 
 /* -------- Protected instance (Bearer) -------- */
 export const authAxios: AxiosInstance = axios.create({
-  baseURL,
+  baseURL, // ...:4002/api
   timeout: 15000,
 });
 
-/** สร้างรายการ endpoint แบบ “API-relative” (ไม่ใส่ /api นำหน้า) */
-const PROTECTED_CORE_PATHS = [
-  '/me',
-  '/patient-cases',
-  '/question-results',
-  '/referral-guidances',
-];
-const EXCEPT_CORE_PATHS = ['/up', '/health', '/login-token'];
-
-function isProtectedUrl(url: string | undefined): boolean {
-  if (!url) return false;
-  // แปลงเป็น path relative ต่อราก API
-  const p = normalizeToApiRelativePath(url); // เช่น '/me' แทนที่จะเป็น '/api/me'
-  if (EXCEPT_CORE_PATHS.some((x) => p.startsWith(x))) return false;
-  return PROTECTED_CORE_PATHS.some((x) => p.startsWith(x));
-}
+const EXCEPT_AUTH_PATHS = ['/up', '/health', '/login-token'];
 
 authAxios.interceptors.request.use(
   (config) => {
     setJsonHeaders(config);
 
-    // กัน /api ซ้ำ
     if (typeof config.url === 'string') {
-      const normalized = normalizeToApiRelativePath(config.url);
-      config.url = normalized;
-    }
+      const p = toApiRelativePath(config.url) || '/';
+      config.url = p;
 
-    const headers = ensureAxiosHeaders(config);
+      const needsAuth = !EXCEPT_AUTH_PATHS.some((x) => p.startsWith(x));
+      (config as any).__shouldAuth = needsAuth;
 
-    (config as any).__shouldAuth = isProtectedUrl(config.url);
-
-    if (typeof window !== 'undefined') {
-      const token = getToken();
-      if (token) {
-        headers.set('Authorization', `Bearer ${token}`);
-        (config as any).__hadAuth = true;
-      } else {
-        (config as any).__hadAuth = false;
+      if (needsAuth && typeof window !== 'undefined') {
+        const token = getToken();
+        if (token) {
+          ensureAxiosHeaders(config).set('Authorization', `Bearer ${token}`);
+          (config as any).__hadAuth = true;
+        } else {
+          (config as any).__hadAuth = false;
+        }
       }
     }
     return config;
@@ -232,7 +193,7 @@ authAxios.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-/** กันเคลียร์ token มั่ว ๆ: เคลียร์เฉพาะกรณีที่ “ควรจะส่ง token + เราส่งไปแล้วจริง ๆ” */
+/** กันเคลียร์ token มั่ว ๆ */
 let loggingOut = false;
 
 authAxios.interceptors.response.use(
@@ -240,7 +201,6 @@ authAxios.interceptors.response.use(
   (error: AxiosError) => {
     const status = error.response?.status;
     const cfg = error.config as any;
-
     const shouldLogout =
       (status === 401 || status === 419) &&
       cfg?.__shouldAuth === true &&
@@ -249,14 +209,9 @@ authAxios.interceptors.response.use(
     if (shouldLogout && !loggingOut && typeof window !== 'undefined') {
       loggingOut = true;
       try {
-        localStorage.setItem(
-          'auth_event',
-          JSON.stringify({ type: 'LOGOUT', at: Date.now() })
-        );
+        localStorage.setItem('auth_event', JSON.stringify({ type: 'LOGOUT', at: Date.now() }));
       } catch {}
-      setTimeout(() => {
-        loggingOut = false;
-      }, 1000);
+      setTimeout(() => { loggingOut = false; }, 1000);
     }
 
     if (isDbNotReady(error)) {
@@ -270,17 +225,13 @@ authAxios.interceptors.response.use(
 export function setAuthHeader(token?: string | null) {
   if (typeof token === 'string' && token.length > 0) {
     authAxios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    try {
-      persistToken(token);
-    } catch {}
+    try { persistToken(token); } catch {}
   }
 }
 
 export function clearAuthHeader() {
   delete authAxios.defaults.headers.common['Authorization'];
-  try {
-    dropToken();
-  } catch {}
+  try { dropToken(); } catch {}
 }
 
 /* ---- ตั้งค่าเริ่มต้นจาก localStorage ---- */

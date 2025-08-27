@@ -70,22 +70,46 @@ export default function SpecialDiseaseSurveillancePage() {
   const [loading, setLoading] = useState(true)
   const [showAlertPopup, setShowAlertPopup] = useState(false)
 
+  // helper: คืน base URL จาก ENV (กัน / ท้าย และกัน /api ซ้ำ)
+  function apiBase(): string {
+    const raw = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').trim()
+    const base = raw === '' ? 'http://192.168.1.113:4002' : raw.replace(/\/+$/,'')
+    return base.endsWith('/api') ? base : `${base}/api`
+  }
+
   useEffect(() => {
+    let alive = true
+
     const fetchDiseases = async () => {
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL}/api/diseases`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem('token')}` || '' },
+        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+
+        const headers: Record<string, string> = { Accept: 'application/json' }
+        if (token) headers.Authorization = `Bearer ${token}` // ใส่เฉพาะตอนมี token
+
+        const res = await fetch(`${apiBase()}/diseases`, {
+          headers,
+          cache: 'no-store',     // กัน cache ค้าง
+          credentials: 'omit',   // ใช้ Bearer token ไม่ต้องส่งคุกกี้
         })
+
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status} ${res.statusText}`)
+        }
+
         const data = await res.json()
         if (!Array.isArray(data)) throw new Error('API response is not an array')
-        setDiseases(data)
+
+        if (alive) setDiseases(data)
       } catch (error) {
         console.error('Failed to fetch diseases:', error)
       } finally {
-        setLoading(false)
+        if (alive) setLoading(false)
       }
     }
+
     fetchDiseases()
+    return () => { alive = false }
   }, [])
 
   const normSearch = useMemo(() => normalize(searchTerm), [searchTerm])

@@ -7,19 +7,49 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\Log;
 use Carbon\Carbon;
 
 class AdminUserController extends Controller
 {
-    /**
-     * สร้าง payload มาตรฐานสำหรับ Popup ฝั่ง Frontend
-     *
-     * @param  User   $user
-     * @param  string $code   เช่น ALLOW_REAPPLY | CONTACT_ADMIN | APPROVED | REJECTED | NO_OP | INVALID_STATUS | SELF_ACTION_FORBIDDEN | USE_REAPPLY_FLOW
-     * @param  string $message
-     * @param  array  $extra  ['reason'=>?, 'user_hint'=>?, 'reapply_until'=>?, 'actions'=>[...]]
-     * @param  int    $httpStatus
-     */
+    /* =========================
+     * Sentinel (ไม่ใช้ NULL)
+     * ========================= */
+    protected function epochDateTime(): string { return '1970-01-01 00:00:01'; }
+    protected function epochDate(): string     { return '1970-01-01'; }
+    protected function emptyStr(): string      { return ''; }
+
+    /* =========================
+     * Helpers
+     * ========================= */
+
+    /** เช็คว่า target เป็นแอดมินหรือไม่ (อ่าน attribute ตรง ๆ ให้ถูกกับ Eloquent) */
+    protected function isAdmin(User $u): bool
+    {
+        $role = $u->getAttribute('role');
+        if ($role === 'admin') return true;
+
+        // เผื่อมีฟิลด์ is_admin ในสคีมาเก่า
+        $isAdmin = $u->getAttribute('is_admin');
+        return (bool) $isAdmin;
+    }
+
+    /** ลบโทเคนแบบปลอดภัย (กรณีไม่ได้ใช้ Sanctum จะไม่มีเมธอด tokens()) */
+    protected function safeDeleteTokens(User $user): void
+    {
+        try {
+            if (method_exists($user, 'tokens')) {
+                $user->tokens()->delete();
+            }
+        } catch (\Throwable $e) {
+            Log::warning('safeDeleteTokens failed', [
+                'user_id' => $user->id,
+                'err'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /** payload สำหรับแสดง Popup ฝั่ง FE */
     protected function respondPopup(User $user, string $code, string $message, array $extra = [], int $httpStatus = 200): JsonResponse
     {
         $payload = [
@@ -37,9 +67,9 @@ class AdminUserController extends Controller
         return response()->json($payload, $httpStatus);
     }
 
-    /**
+    /* =========================
      * GET /api/admin/users
-     */
+     * ========================= */
     public function index(Request $request)
     {
         $data = $request->validate([
@@ -59,7 +89,6 @@ class AdminUserController extends Controller
         $sort    = $data['sort']   ?? 'created_at';
         $dir     = $data['dir']    ?? 'desc';
 
-        // ---- date range (Asia/Bangkok by default) ----
         $tz   = config('app.timezone', 'Asia/Bangkok');
         $from = $data['from'] ?? null;
         $to   = $data['to']   ?? null;
@@ -74,7 +103,6 @@ class AdminUserController extends Controller
             $end   = Carbon::parse($to,   $tz)->endOfDay();
         }
 
-        // ---- safe sort ----
         $sortable = [
             'created_at' => 'created_at',
             'first_name' => 'first_name',
@@ -86,7 +114,6 @@ class AdminUserController extends Controller
         $sortCol = $sortable[$sort] ?? 'created_at';
         $dir     = $dir === 'asc' ? 'asc' : 'desc';
 
-        // ---- base filter (shared by list + counts) ----
         $base = User::query()
             ->when($q !== '', function ($qb) use ($q) {
                 $qb->where(function ($qq) use ($q) {
@@ -98,19 +125,16 @@ class AdminUserController extends Controller
             })
             ->when(isset($start, $end), fn ($qb) => $qb->whereBetween('created_at', [$start, $end]));
 
-        // ---- list query ----
         $query = (clone $base)
             ->when($status !== 'all', fn ($qb) => $qb->where('status', $status))
             ->orderBy($sortCol, $dir)
             ->select([
                 'id','cid','first_name','last_name','email','status','created_at',
-                // FE ต้องใช้เพิ่ม
                 'rejected_reason','reapply_allowed','reapply_until','approved_at',
             ]);
 
         $paginator = $query->paginate($perPage);
 
-        // ---- counts (respect q/from/to; ignore status) ----
         $rawCounts = (clone $base)
             ->selectRaw('status, COUNT(*) as c')
             ->groupBy('status')
@@ -144,18 +168,15 @@ class AdminUserController extends Controller
         ], 200);
     }
 
-    /**
-     * (Legacy) GET /api/admin/users/pending
-     */
     public function getPendingUsers(Request $request)
     {
         $request->merge(['status' => 'pending']);
         return $this->index($request);
     }
 
-    /**
+    /* =========================
      * PUT /api/admin/users/{id}/approve
-     */
+     * ========================= */
     public function approveUser(Request $request, $id)
     {
         $actor = $request->user();
@@ -175,7 +196,16 @@ class AdminUserController extends Controller
             );
         }
 
-        // กันเคสอนุมัติ user ที่ถูกปฏิเสธ → ให้ใช้ flow อนุญาตสมัครใหม่แทน
+        if ($this->isAdmin($user)) {
+            return $this->respondPopup(
+                $user,
+                'TARGET_IS_ADMIN_FORBIDDEN',
+                'ไม่สามารถปรับสถานะของผู้ดูแลระบบได้',
+                ['actions' => [['key'=>'CLOSE','label'=>'ปิด']]],
+                403
+            );
+        }
+
         if ($user->status === 'rejected') {
             return $this->respondPopup(
                 $user,
@@ -203,10 +233,12 @@ class AdminUserController extends Controller
             $user->forceFill([
                 'status'          => 'approved',
                 'approved_at'     => now(config('app.timezone', 'Asia/Bangkok')),
-                'rejected_reason' => null,
+                'rejected_reason' => $this->emptyStr(),
                 'reapply_allowed' => false,
-                'reapply_until'   => null,
+                'reapply_until'   => $this->epochDate(),
             ])->save();
+
+            $this->safeDeleteTokens($user);
         });
 
         return $this->respondPopup(
@@ -218,10 +250,9 @@ class AdminUserController extends Controller
         );
     }
 
-    /**
+    /* =========================
      * PUT /api/admin/users/{id}/reject
-     * Body: { reason?: string }
-     */
+     * ========================= */
     public function rejectUser(Request $request, $id)
     {
         $actor = $request->user();
@@ -241,14 +272,23 @@ class AdminUserController extends Controller
             );
         }
 
+        if ($this->isAdmin($user)) {
+            return $this->respondPopup(
+                $user,
+                'TARGET_IS_ADMIN_FORBIDDEN',
+                'ไม่สามารถปรับสถานะของผู้ดูแลระบบได้',
+                ['actions' => [['key'=>'CLOSE','label'=>'ปิด']]],
+                403
+            );
+        }
+
         $data = $request->validate([
             'reason' => 'nullable|string|max:255',
         ]);
 
-        // เดิม rejected → อัปเดตเหตุผลได้
         if ($user->status === 'rejected') {
             $user->forceFill([
-                'rejected_reason' => $data['reason'] ?? $user->rejected_reason,
+                'rejected_reason' => $data['reason'] ?? $user->rejected_reason ?? $this->emptyStr(),
             ])->save();
 
             return $this->respondPopup(
@@ -266,13 +306,13 @@ class AdminUserController extends Controller
         DB::transaction(function () use ($user, $data) {
             $user->forceFill([
                 'status'          => 'rejected',
-                'approved_at'     => null,
-                'rejected_reason' => $data['reason'] ?? null,
+                'approved_at'     => $this->epochDateTime(),
+                'rejected_reason' => $data['reason'] ?? $this->emptyStr(),
                 'reapply_allowed' => false,
-                'reapply_until'   => null,
+                'reapply_until'   => $this->epochDate(),
             ])->save();
 
-            try { $user->tokens()->delete(); } catch (\Throwable $e) {}
+            $this->safeDeleteTokens($user);
         });
 
         return $this->respondPopup(
@@ -290,11 +330,9 @@ class AdminUserController extends Controller
         );
     }
 
-    /**
+    /* =========================
      * PUT /api/admin/users/{id}/allow-reapply
-     * ใช้กับเคส rejected เท่านั้น
-     * Body (optional): { allow_days?: number } → ถ้ากำหนดวัน จะคงสถานะ rejected + เปิดสิทธิ์สมัครใหม่จนถึงวันหมดสิทธิ์
-     */
+     * ========================= */
     public function allowReapply(Request $request, $id)
     {
         $actor = $request->user();
@@ -314,6 +352,16 @@ class AdminUserController extends Controller
             );
         }
 
+        if ($this->isAdmin($user)) {
+            return $this->respondPopup(
+                $user,
+                'TARGET_IS_ADMIN_FORBIDDEN',
+                'ไม่สามารถปรับสถานะของผู้ดูแลระบบได้',
+                ['actions' => [['key'=>'CLOSE','label'=>'ปิด']]],
+                403
+            );
+        }
+
         if ($user->status !== 'rejected') {
             return $this->respondPopup(
                 $user,
@@ -326,17 +374,18 @@ class AdminUserController extends Controller
 
         $allowDays = $request->integer('allow_days'); // optional
         $tz = config('app.timezone', 'Asia/Bangkok');
-        $until = $allowDays ? Carbon::now($tz)->addDays($allowDays) : null;
 
-        DB::transaction(function () use ($user, $until) {
-            // คงสถานะ rejected และเปิดสิทธิ์สมัครใหม่ (ตามแนวคิดให้ล็อกอินแล้วเจอ ALLOW_REAPPLY)
+        $untilCarbon = $allowDays ? Carbon::now($tz)->addDays($allowDays) : null;
+        $untilStr = $untilCarbon ? $untilCarbon->toDateString() : $this->epochDate();
+
+        DB::transaction(function () use ($user, $untilStr) {
             $user->forceFill([
                 'status'          => 'rejected',
                 'reapply_allowed' => true,
-                'reapply_until'   => $until,
+                'reapply_until'   => $untilStr,
             ])->save();
 
-            try { $user->tokens()->delete(); } catch (\Throwable $e) {}
+            $this->safeDeleteTokens($user);
         });
 
         return $this->respondPopup(
@@ -345,8 +394,8 @@ class AdminUserController extends Controller
             'เปิดสิทธิ์ให้ผู้ใช้นี้สามารถ “สมัครใหม่” ได้แล้ว',
             [
                 'user_hint'     => 'ผู้ใช้ต้องไปหน้า “สมัครสมาชิก” และใช้เลขบัตรเดิม',
-                'reapply_until' => $until?->toIso8601String(),
-                'actions' => [
+                'reapply_until' => $untilCarbon?->toIso8601String(),
+                'actions'       => [
                     ['key'=>'CLOSE','label'=>'ปิด'],
                 ],
             ],
@@ -354,11 +403,9 @@ class AdminUserController extends Controller
         );
     }
 
-    /**
+    /* =========================
      * PUT /api/admin/users/{id}/block-reapply
-     * Body: { reason?: string }
-     * ตรึงสถานะเป็น rejected พร้อมเหตุผล และปิดสิทธิ์สมัครใหม่
-     */
+     * ========================= */
     public function blockReapply(Request $request, $id)
     {
         $actor = $request->user();
@@ -378,6 +425,16 @@ class AdminUserController extends Controller
             );
         }
 
+        if ($this->isAdmin($user)) {
+            return $this->respondPopup(
+                $user,
+                'TARGET_IS_ADMIN_FORBIDDEN',
+                'ไม่สามารถปรับสถานะของผู้ดูแลระบบได้',
+                ['actions' => [['key'=>'CLOSE','label'=>'ปิด']]],
+                403
+            );
+        }
+
         $data = $request->validate([
             'reason' => 'nullable|string|max:255',
         ]);
@@ -385,13 +442,13 @@ class AdminUserController extends Controller
         DB::transaction(function () use ($user, $data) {
             $user->forceFill([
                 'status'          => 'rejected',
-                'approved_at'     => null,
+                'approved_at'     => $this->epochDateTime(),
                 'rejected_reason' => $data['reason'] ?? 'Blocked from re-apply',
                 'reapply_allowed' => false,
-                'reapply_until'   => null,
+                'reapply_until'   => $this->epochDate(),
             ])->save();
 
-            try { $user->tokens()->delete(); } catch (\Throwable $e) {}
+            $this->safeDeleteTokens($user);
         });
 
         return $this->respondPopup(
@@ -407,5 +464,50 @@ class AdminUserController extends Controller
             ],
             200
         );
+    }
+
+    /* =========================
+     * DELETE /api/admin/users/{id}
+     * กันลบตัวเอง + กันลบแอดมิน
+     * ========================= */
+    public function destroy(Request $request, $id)
+    {
+        $actor = $request->user();
+        if (!$actor) {
+            return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
+        }
+
+        $user = User::findOrFail($id);
+
+        // ห้ามลบตัวเอง
+        if ((int)$actor->id === (int)$user->id) {
+            return $this->respondPopup(
+                $user,
+                'SELF_DELETE_FORBIDDEN',
+                'ไม่สามารถลบบัญชีของตนเองได้',
+                ['actions' => [['key'=>'CLOSE','label'=>'ปิด']]],
+                403
+            );
+        }
+
+        // ห้ามลบแอดมิน
+        if ($this->isAdmin($user)) {
+            return $this->respondPopup(
+                $user,
+                'TARGET_IS_ADMIN_FORBIDDEN',
+                'ไม่สามารถลบบัญชีผู้ดูแลระบบได้',
+                ['actions' => [['key'=>'CLOSE','label'=>'ปิด']]],
+                403
+            );
+        }
+
+        $this->safeDeleteTokens($user);
+        $user->delete(); // ถ้าใช้ SoftDeletes จะเป็น soft delete
+
+        return response()->json([
+            'code'    => 'DELETED',
+            'message' => 'ลบผู้ใช้สำเร็จ',
+            'user'    => $user->only(['id','cid','first_name','last_name','email','status']),
+        ], 200);
     }
 }

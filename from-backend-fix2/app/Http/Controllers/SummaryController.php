@@ -19,22 +19,19 @@ class SummaryController extends Controller
 
     /**
      * GET /api/summary
-     * Query params:
-     *  - type: form|guide|total (optional; omit = total)  // รองรับ alias formppk ด้วย
-     *  - start_date: YYYY-MM-DD (optional)
-     *  - end_date:   YYYY-MM-DD (optional)
+     * รองรับ: ?type=form|guide|total|formppk
+     * วัน: start_date/end_date หรือ from/to หรือ date (วันเดียว)
      */
     public function index(Request $request)
     {
-        // 1) Validate query params (ยอมรับ formppk เพื่อ backward compat)
+        // (1) Validate
         $validator = Validator::make($request->all(), [
             'type'       => 'nullable|in:form,guide,total,formppk',
             'start_date' => 'nullable|date_format:Y-m-d',
             'end_date'   => 'nullable|date_format:Y-m-d',
-        ], [
-            'type.in'                 => 'type ต้องเป็น form, guide, total หรือ formppk เท่านั้น',
-            'start_date.date_format'  => 'start_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
-            'end_date.date_format'    => 'end_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
+            'from'       => 'nullable|date_format:Y-m-d',
+            'to'         => 'nullable|date_format:Y-m-d',
+            'date'       => 'nullable|date_format:Y-m-d',
         ]);
 
         if ($validator->fails()) {
@@ -44,50 +41,64 @@ class SummaryController extends Controller
             ], 422);
         }
 
-        // 2) Normalize params
-        $type      = $request->query('type') ?: 'total'; // default รวมยอดเดียว
-        if ($type === 'formppk') {
-            $type = 'form';
-        }
+        // (2) Normalize type
+        $type = $request->query('type') ?: 'total';
+        if ($type === 'formppk') $type = 'form';
 
-        $startDate = $request->query('start_date');
-        $endDate   = $request->query('end_date');
+        // (3) Normalize dates (from/to | start_date/end_date | date)
+        $startDate = $request->query('start_date') ?? $request->query('from');
+        $endDate   = $request->query('end_date')   ?? $request->query('to');
+        $oneDate   = $request->query('date');
+
+        $tz = config('app.timezone', 'Asia/Bangkok');
 
         try {
-            // 3) Single-day and swap handling
-            if ($startDate && !$endDate) {
-                $endDate = $startDate;
-            } elseif ($endDate && !$startDate) {
-                $startDate = $endDate;
+            // วันเดียว → ใช้เป็นทั้ง start/end
+            if (!$startDate && !$endDate && $oneDate) {
+                $startDate = $oneDate;
+                $endDate   = $oneDate;
             }
+            // กรอกมาไม่ครบ → เติมให้ครบ
+            if ($startDate && !$endDate) $endDate = $startDate;
+            if ($endDate && !$startDate) $startDate = $endDate;
 
+            // จัดช่วงวันให้เรียบร้อย
             if ($startDate && $endDate) {
-                $tz = config('app.timezone', 'Asia/Bangkok');
                 $start = Carbon::parse($startDate, $tz)->startOfDay();
                 $end   = Carbon::parse($endDate, $tz)->endOfDay();
-
                 if ($start->greaterThan($end)) {
-                    [$startDate, $endDate] = [$end->toDateString(), $start->toDateString()];
-                } else {
-                    $startDate = $start->toDateString();
-                    $endDate   = $end->toDateString();
+                    [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
                 }
+                // ส่งเป็น string YYYY-MM-DD (ส่วน logic endOfDay ให้ serviceจัดการเองตามต้องการ)
+                $startDate = $start->toDateString();
+                $endDate   = $end->toDateString();
+            } else {
+                $startDate = null;
+                $endDate   = null;
             }
 
-            // 4) Fetch summary via service
+            // (4) เรียก service
             $summary = $this->summaryService->getSummary($type, $startDate, $endDate);
 
-            // 5) Response
+            // (5) ทำให้เป็น array เสมอ (รองรับ Arrayable/JsonSerializable)
+            if (is_object($summary) && method_exists($summary, 'toArray')) {
+                $summary = $summary->toArray();
+            } elseif ($summary instanceof \JsonSerializable) {
+                $summary = $summary->jsonSerialize();
+            } elseif (!is_array($summary)) {
+                $summary = (array) $summary;
+            }
+
             return response()->json([
                 'message' => 'Summary fetched successfully',
                 'meta'    => [
-                    'type'        => $type,
-                    'start_date'  => $startDate,
-                    'end_date'    => $endDate,
-                    'timezone'    => config('app.timezone', 'Asia/Bangkok'),
-                    'generated_at'=> Carbon::now(config('app.timezone', 'Asia/Bangkok'))->toIso8601String(),
+                    'type'         => $type,
+                    'start_date'   => $startDate,
+                    'end_date'     => $endDate,
+                    'timezone'     => $tz,
+                    'generated_at' => Carbon::now($tz)->toIso8601String(),
                 ],
-                'data'    => $summary->toArray(),
+                'data' => $summary,
             ], 200);
 
         } catch (\Throwable $e) {
@@ -100,7 +111,7 @@ class SummaryController extends Controller
 
             return response()->json([
                 'message' => 'Failed to fetch summary',
-                'error'   => app()->hasDebugModeEnabled() ? $e->getMessage() : 'Unexpected error',
+                'error'   => config('app.debug') ? $e->getMessage() : 'Unexpected error',
             ], 500);
         }
     }

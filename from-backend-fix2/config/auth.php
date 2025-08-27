@@ -41,11 +41,12 @@ return [
             'provider' => 'users',
         ],
 
-        'api' => [ 
-            'driver' => 'token',
+        'api' => [
+            'driver' => 'sanctum',
             'provider' => 'users',
         ],
     ],
+
     /*
     |--------------------------------------------------------------------------
     | User Providers

@@ -4,35 +4,52 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Third Party Services
+    | Stateful Domains
     |--------------------------------------------------------------------------
     |
-    | This file is for storing the credentials for third party services such
-    | as Mailgun, Postmark, AWS and more. This file provides the de facto
-    | location for this type of information, allowing packages to have
-    | a conventional file to locate the various service credentials.
+    | ไม่ใช้ cookie authentication แล้ว → ไม่ต้องกำหนด domain อะไรทั้งนั้น
     |
     */
+    'stateful' => [],
 
-    'postmark' => [
-        'token' => env('POSTMARK_TOKEN'),
-    ],
+    /*
+    |--------------------------------------------------------------------------
+    | Sanctum Guards
+    |--------------------------------------------------------------------------
+    |
+    | ใช้แค่ api guard พอ
+    |
+    */
+    'guard' => ['api'],
 
-    'resend' => [
-        'key' => env('RESEND_KEY'),
-    ],
+    /*
+    |--------------------------------------------------------------------------
+    | Expiration Minutes
+    |--------------------------------------------------------------------------
+    |
+    | ตั้งให้อายุ token = 1 วัน (1440 นาที)
+    | จะทำให้ token หมดอายุอัตโนมัติ ไม่อยู่ตลอดไป
+    |
+    */
+    'expiration' => 1440,
 
-    'ses' => [
-        'key' => env('AWS_ACCESS_KEY_ID'),
-        'secret' => env('AWS_SECRET_ACCESS_KEY'),
-        'region' => env('AWS_DEFAULT_REGION', 'us-east-1'),
-    ],
+    /*
+    |--------------------------------------------------------------------------
+    | Token Prefix
+    |--------------------------------------------------------------------------
+    |
+    | ไม่ต้องใส่ prefix ก็ได้
+    |
+    */
+    'token_prefix' => '',
 
-    'slack' => [
-        'notifications' => [
-            'bot_user_oauth_token' => env('SLACK_BOT_USER_OAUTH_TOKEN'),
-            'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
-        ],
-    ],
-
+    /*
+    |--------------------------------------------------------------------------
+    | Sanctum Middleware
+    |--------------------------------------------------------------------------
+    |
+    | ไม่ใช้ cookie SPA → ไม่ต้องมี middleware อะไรเพิ่ม
+    |
+    */
+    'middleware' => [],
 ];

@@ -13,7 +13,7 @@ class DiseasesSeeder extends Seeder
         $now = Carbon::now();
 
         $data = [
-            // ---------------- 48 ชั่วโมง (alert = 0) ----------------
+            // name_th, name_en, icd_10, category, alert
             ['โรคอหิวาตกโรค',        '',                            'A00.0, A00.1, A00.9',                                                                                 '48 ชั่วโมง', 0],
             ['โรคไข้เลือดออก',        '',                            'A90, A91',                                                                                             '48 ชั่วโมง', 0],
             ['โรคพิษสุนัขบ้า',        '',                            'A82.0, A82.1, A82.9',                                                                                 '48 ชั่วโมง', 0],
@@ -46,7 +46,7 @@ class DiseasesSeeder extends Seeder
             ['โรคไอกรน',              'Whooping cough',               'A37.0, A37.9',                                                                                         '48 ชั่วโมง', 0],
             ['โรคเลปโตสไปโรซีส',       'Leptospirosis',                'A27.0, A27.8, A27.9',                                                                                  '48 ชั่วโมง', 0],
 
-            // ---------------- 24 ชั่วโมง (alert = 1) ----------------
+            // 24 ชั่วโมง (alert = 1)
             ['โรคกาฬโรค',             'Plague',                       'A20.0–A20.3, A20.7, A20.9',                                                                            '24 ชั่วโมง', 1],
             ['โรคไข้ทรพิษ',            'Smallpox',                     'B03',                                                                                                  '24 ชั่วโมง', 1],
             ['โรคไข้เลือดออกไครเมียนคองโก','Crimean–Congo Hemorrhagic Fever','A98.0',                                                                                     '24 ชั่วโมง', 1],
@@ -62,7 +62,7 @@ class DiseasesSeeder extends Seeder
             ['โรควัณโรคดื้อยาหลายขนานชนิดรุนแรงมาก','XDR-TB',     null,                                                                                                   '24 ชั่วโมง', 1],
             ['โรคฝีดาษวานร',          'Monkeypox',                    'B04',                                                                                                  '24 ชั่วโมง', 1],
 
-            // ---------------- 2 ชั่วโมง (alert = 1) ----------------
+            // 2 ชั่วโมง (alert = 1)
             ['โรคกาฬโรค',             'Plague',                       'A20.0–A20.9',                                                                                           '2 ชั่วโมง', 1],
             ['โรคไข้ทรพิษ',            'Smallpox',                     'B03',                                                                                                  '2 ชั่วโมง', 1],
             ['โรคไข้เลือดออกไครเมียนคองโก','Crimean–Congo Hemorrhagic Fever','A98.0',                                                                                     '2 ชั่วโมง', 1],
@@ -79,15 +79,27 @@ class DiseasesSeeder extends Seeder
             ['โรคฝีดาษวานร',          'Monkeypox',                    'B04',                                                                                                  '2 ชั่วโมง', 1],
         ];
 
-        $payload = array_map(fn($r) => [
-            'name_th'    => $r[0],
-            'name_en'    => $r[1],
-            'icd_10'     => $r[2],
-            'category'   => $r[3],
-            'alert'      => $r[4],
-            'created_at' => $now,
-            'updated_at' => $now,
-        ], $data);
+        // map -> ป้องกัน null
+        $payload = array_map(function ($r) use ($now) {
+            $nameEn = $r[1] ?? '';
+            $icd    = $r[2] ?? '';
+            if ($icd === null || $icd === '?') {
+                $icd = '';
+            }
+            // ตัดเว้นวรรคขอบ ๆ
+            $icd = trim((string)$icd);
+            $nameEn = trim((string)$nameEn);
+
+            return [
+                'name_th'    => $r[0],
+                'name_en'    => $nameEn,
+                'icd_10'     => $icd,    // ห้าม null
+                'category'   => $r[3],   // ต้องตรง enum
+                'alert'      => (int)$r[4],
+                'created_at' => $now,
+                'updated_at' => $now,
+            ];
+        }, $data);
 
         DB::table('diseases')->upsert(
             $payload,

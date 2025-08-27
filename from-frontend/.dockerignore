@@ -1,9 +1,3 @@
-# env (อย่าบังเอิญ bake ความลับ)
-.env
-.env.*
-!.env.frontend       
-!.env.example
-
 # git
 .git
 .git/*

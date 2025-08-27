@@ -29,20 +29,16 @@ ENV TZ=Asia/Bangkok \
     COMPOSER_MEMORY_LIMIT=-1 \
     COMPOSER_PROCESS_TIMEOUT=1800
 
-# ===== Install vendors (round 1: no-scripts, because artisan not copied yet) =====
+# ===== Install vendors (round 1: no-scripts) =====
 COPY composer.json composer.lock* ./
 RUN composer install --no-interaction --prefer-dist --no-dev -o --no-scripts
 
 # ===== Copy app source =====
 COPY . .
 
-# ===== Finalize vendors (round 2 or manual hooks) =====
-# วิธี A: รันสคริปต์ที่ถูกปิดด้วยมือ (เร็วและชัดเจน)
+# ===== Finalize vendors =====
 RUN composer dump-autoload -o \
  && php artisan package:discover --ansi || true
-
-# (ทางเลือก วิธี B: ใช้ install อีกรอบเพื่อให้สคริปต์รันเอง — คอมเมนต์ไว้เผื่อเลือกใช้)
-# RUN composer install --no-interaction --prefer-dist --no-dev -o
 
 # ===== Entrypoint (serve + migrate/seed/caches) =====
 RUN cat > /usr/local/bin/entrypoint.sh <<'SH' \
@@ -57,16 +53,40 @@ set -e
 echo "[entry] Start $(date -Iseconds)"
 echo "[entry] APP_PORT=$APP_PORT RUN_MIGRATIONS=$RUN_MIGRATIONS RUN_SEEDER=$RUN_SEEDER"
 
-# permissions
+# --- create required dirs ---
+mkdir -p \
+  storage/framework/cache \
+  storage/framework/sessions \
+  storage/framework/testing \
+  storage/framework/views \
+  bootstrap/cache
+
+# --- try proper ownership first (www-data) ---
+WEB_USER="www-data"
+if ! id www-data >/dev/null 2>&1; then
+  # Alpine CLI ไม่มี www-data? สร้างให้
+  addgroup -g 82 -S www-data || true
+  adduser  -u 82 -D -S -G www-data www-data || true
+fi
+
+# บาง FS (เช่น Windows bind mount) อาจไม่รองรับ chown → ไม่ fail ถ้าทำไม่ได้
+chown -R "$WEB_USER:$WEB_USER" storage bootstrap/cache || true
 chmod -R ug+rwX storage bootstrap/cache || true
 
-# clear caches
-php artisan config:clear || true
-php artisan cache:clear  || true
-php artisan route:clear  || true
-php artisan view:clear   || true
+# ถ้ายังเขียนไม่ได้ ให้ fallback 777 (เฉพาะสองโฟลเดอร์นี้)
+touch storage/.perm_test 2>/dev/null || {
+  echo "[entry] fallback chmod 777 (bind-mount/permission issue detected)"
+  chmod -R 777 storage bootstrap/cache || true
+}
+rm -f storage/.perm_test 2>/dev/null || true
 
-# generate key if missing
+echo "[entry] clearing caches…"
+php artisan config:clear || { echo "[entry] config:clear failed"; ls -la bootstrap/cache || true; exit 1; }
+php artisan cache:clear  || { echo "[entry] cache:clear failed";  ls -la storage/framework/cache || true; exit 1; }
+php artisan route:clear  || { echo "[entry] route:clear failed";  exit 1; }
+php artisan view:clear   || { echo "[entry] view:clear failed";   ls -la storage/framework/views || true; exit 1; }
+
+# generate key if missing (ถ้าคุณใช้ APP_KEY อยู่แล้ว บรรทัดนี้จะข้าม)
 if [ -z "${APP_KEY:-}" ] && [ -f .env ] && ! grep -qE '^APP_KEY=.+$' .env; then
   php artisan key:generate --force --ansi || true
 fi
@@ -81,7 +101,7 @@ if [ "$RUN_SEEDER" = "1" ]; then
   php artisan db:seed --force --no-interaction || true
 fi
 
-# cache & optimize
+# cache & optimize (ไม่ต้อง fail ถ้าค้าง)
 php artisan storage:link || true
 php artisan config:cache || true
 php artisan route:cache  || true

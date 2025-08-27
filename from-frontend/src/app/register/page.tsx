@@ -106,9 +106,32 @@ export default function RegisterPage() {
     isSubmitting.current = true
     setError('')
 
-    // validate ให้เหมือนหน้า login
+    // normalize email ก่อน validate/ส่ง
+    const email = formData.email.trim().toLowerCase()
+
+    // validate ฝั่ง FE (ฝั่ง BE ยังตรวจซ้ำอีกชั้น)
     if (!/^\d{13}$/.test(formData.cid)) {
       setError('เลขบัตรประชาชนต้องมี 13 หลัก')
+      isSubmitting.current = false
+      return
+    }
+    if (!email) {
+      setError('กรุณากรอกอีเมล')
+      isSubmitting.current = false
+      return
+    }
+    if (!/^[^\s@]+@[^\s@]+$/.test(email)) {
+      setError('รูปแบบอีเมลไม่ถูกต้อง (ต้องมี @ อย่างน้อย)')
+      isSubmitting.current = false
+      return
+    }
+    if (!formData.first_name.trim()) {
+      setError('กรุณากรอกชื่อ')
+      isSubmitting.current = false
+      return
+    }
+    if (!formData.last_name.trim()) {
+      setError('กรุณากรอกนามสกุล')
       isSubmitting.current = false
       return
     }
@@ -125,7 +148,10 @@ export default function RegisterPage() {
 
     try {
       setLoading(true)
-      const res = await api.post('/register', formData)
+      const res = await api.post('/register', {
+        ...formData,
+        email, // ส่งตัวที่ trim/lower แล้ว
+      })
 
       if (res.status === 201) {
         setFinished(true)
@@ -133,7 +159,7 @@ export default function RegisterPage() {
         setTimeout(() => router.push('/login'), 2000)
       }
     } catch (err: any) {
-      /** ✅ จัดการ 422 Validation จาก Laravel (errors: { field: [msg] }) */
+      /** จัดการ 422 Validation จาก Laravel (errors: { field: [msg] }) */
       if (err?.response?.status === 422 && err?.response?.data?.errors) {
         const errors = err.response.data.errors as Record<string, string[]>
         const firstMsg = Object.values(errors)[0]?.[0]
@@ -242,10 +268,12 @@ export default function RegisterPage() {
                     inputProps={{
                       type: 'email',
                       name: 'email',
-                      placeholder: 'อีเมล (ไม่บังคับ)',
+                      placeholder: 'อีเมล',
                       value: formData.email,
                       onChange,
                       onKeyDown: handleKeyPress,
+                      inputMode: 'email',
+                      required: true, 
                     }}
                   />
 
@@ -331,10 +359,10 @@ export default function RegisterPage() {
         <ReusablePopup
           {...(() => {
             // ตัด open ที่อาจเผลอปนมาจาก mapper ออก เพื่อกัน override
-            const { open: _drop, ...rest } = popupProps || {};
-            return rest;
+            const { open: _drop, ...rest } = popupProps || {}
+            return rest
           })()}
-          open={Boolean(popupOpen && popupProps)}   
+          open={Boolean(popupOpen && popupProps)}
           onClose={() => setPopupOpen(false)}
         />
       )}

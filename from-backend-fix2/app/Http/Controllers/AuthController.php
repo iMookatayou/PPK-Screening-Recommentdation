@@ -14,13 +14,25 @@ use Carbon\Carbon;
 
 class AuthController extends Controller
 {
-    /** helper: ยังอยู่ในช่วงเปิดสิทธิ์สมัครใหม่หรือไม่ */
+    /** กฎอีเมลแบบหลวม: แค่มี @ และมีตัวอักษรก่อน-หลัง @ ก็พอ (ไม่ต้องมี .com) */
+    protected function looseEmailRule(): string
+    {
+        // ตัวอย่างที่ยอมรับ: user@example, a@b, u@wfh
+        // ไม่ยอมรับ: @domain, user@, มีช่องว่าง
+        return 'regex:/^[^@\s]+@[^@\s]+$/';
+    }
+
+    /** helper: ยังอยู่ในช่วงเปิดสิทธิ์สมัครใหม่หรือไม่ (รองรับ sentinel '1970-01-01') */
     protected function isReapplyWindowOpen(User $u): bool
     {
         if (!$u->reapply_allowed) return false;
-        if (empty($u->reapply_until)) return true; // อนุญาตแบบไม่กำหนดวันหมดเขต
-        return Carbon::now(config('app.timezone', 'Asia/Bangkok'))
-            ->lte(Carbon::parse($u->reapply_until));
+
+        // sentinel = ไม่มีวันหมดเขต
+        $until = $u->reapply_until ? (string) $u->reapply_until : User::EPOCH_DATE;
+        if (User::isEpochDate($until)) return true;
+
+        $tz = config('app.timezone', 'Asia/Bangkok');
+        return Carbon::now($tz)->startOfDay()->lte(Carbon::parse($until, $tz)->endOfDay());
     }
 
     /**
@@ -28,19 +40,29 @@ class AuthController extends Controller
      */
     public function register(Request $request)
     {
-        // 1) Validate (ยังไม่ unique:cid เพื่อควบคุมข้อความตอบเอง)
+        // normalize email ให้เรียบร้อยก่อน validate
+        $request->merge([
+            'email' => mb_strtolower(trim((string) $request->input('email', ''))),
+        ]);
+
+        $emailRule = $this->looseEmailRule();
+
+        // 1) Validate (ไม่ใส่ unique:cid เพื่อควบคุมข้อความเอง; email ต้อง required)
         $validator = Validator::make($request->all(), [
-            'cid'        => ['required', 'digits:13'],
+            'cid'        => ['required', 'digits:13', 'regex:/^\d{13}$/'],
             'first_name' => ['required', 'string', 'max:255'],
             'last_name'  => ['required', 'string', 'max:255'],
-            'email'      => ['nullable', 'email', Rule::unique('users', 'email')],
+            'email'      => ['required', 'string', 'max:255', $emailRule, Rule::unique('users', 'email')],
             'password'   => ['required', 'confirmed', Password::min(8)->letters()->numbers()],
         ], [
             'cid.required'        => 'กรุณากรอกเลขบัตรประชาชน',
             'cid.digits'          => 'เลขบัตรประชาชนต้องมี 13 หลัก',
+            'cid.regex'           => 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก',
             'first_name.required' => 'กรุณากรอกชื่อ',
             'last_name.required'  => 'กรุณากรอกนามสกุล',
-            'email.email'         => 'รูปแบบอีเมลไม่ถูกต้อง',
+            'email.required'      => 'กรุณากรอกอีเมล',
+            // เปลี่ยนข้อความเป็นรูปแบบที่เรายอมรับ
+            'email.regex'         => 'กรุณากรอกอีเมลในรูปแบบ name@domain (ไม่ต้องมี .com ก็ได้)',
             'email.unique'        => 'อีเมลนี้ถูกใช้แล้ว',
             'password.required'   => 'กรุณากรอกรหัสผ่าน',
             'password.confirmed'  => 'รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน',
@@ -50,7 +72,7 @@ class AuthController extends Controller
         if ($validator->fails()) {
             Log::warning('[REGISTER] Validation failed', [
                 'errors' => $validator->errors()->toArray(),
-                'input'  => $request->all(),
+                'input'  => collect($request->all())->except(['password', 'password_confirmation'])->toArray(),
             ]);
             return response()->json(['errors' => $validator->errors()], 422);
         }
@@ -60,24 +82,24 @@ class AuthController extends Controller
         // 2) ตรวจเชิงธุรกิจจาก cid
         if ($existing = User::where('cid', $data['cid'])->first()) {
             Log::notice('[REGISTER] CID exists', [
-                'cid'    => $data['cid'],
-                'status' => $existing->status,
-                'reapply_allowed' => $existing->reapply_allowed,
-                'reapply_until'   => $existing->reapply_until,
+                'cid'              => $data['cid'],
+                'status'           => $existing->status,
+                'reapply_allowed'  => $existing->reapply_allowed,
+                'reapply_until'    => (string) $existing->reapply_until,
             ]);
 
-            // เคส re-apply: อนุญาตให้ "สมัครใหม่" ซ้ำบน record เดิม
-            if ($existing->status === 'rejected' && $this->isReapplyWindowOpen($existing)) {
+            // เคส re-apply: อนุญาตให้ “สมัครใหม่” ซ้ำบน record เดิม
+            if ($existing->status === User::STATUS_REJECTED && $this->isReapplyWindowOpen($existing)) {
                 $existing->forceFill([
                     'first_name'      => $data['first_name'],
                     'last_name'       => $data['last_name'],
-                    'email'           => $data['email'] ?? null,
+                    'email'           => $data['email'],   // required
                     'password'        => $data['password'], // mutator จะ hash ให้
-                    'status'          => 'pending',
-                    'approved_at'     => null,
-                    'rejected_reason' => null,
+                    'status'          => User::STATUS_PENDING,
+                    'approved_at'     => null,              // model จะ map เป็น sentinel
+                    'rejected_reason' => null,              // ''
                     'reapply_allowed' => false,
-                    'reapply_until'   => null,
+                    'reapply_until'   => null,              // '1970-01-01'
                 ])->save();
 
                 return response()->json([
@@ -87,8 +109,7 @@ class AuthController extends Controller
                 ], 201);
             }
 
-            // หมดสิทธิ์ re-apply หรือไม่เคยเปิด
-            if ($existing->status === 'rejected') {
+            if ($existing->status === User::STATUS_REJECTED) {
                 return response()->json([
                     'code'    => 'CONTACT_ADMIN',
                     'message' => 'คำขอของคุณถูกปฏิเสธและยังไม่ได้รับสิทธิ์สมัครใหม่ กรุณาติดต่อแอดมิน',
@@ -100,7 +121,7 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            if ($existing->status === 'approved') {
+            if ($existing->status === User::STATUS_APPROVED) {
                 return response()->json([
                     'code'    => 'ALREADY_REGISTERED',
                     'message' => 'เลขบัตรนี้มีบัญชีใช้งานอยู่แล้ว',
@@ -122,16 +143,16 @@ class AuthController extends Controller
             ], 409);
         }
 
-        // 3) สมัครใหม่ปกติ    
+        // 3) สมัครใหม่ปกติ
         try {
             $user = User::create([
                 'cid'        => $data['cid'],
                 'first_name' => $data['first_name'],
                 'last_name'  => $data['last_name'],
-                'email'      => $data['email'] ?? null,
-                'password'   => $data['password'],
-                'role'       => 'user',
-                'status'     => 'pending',
+                'email'      => $data['email'],      // required
+                'password'   => $data['password'],   // mutator hash
+                'role'       => User::ROLE_USER,
+                'status'     => User::STATUS_PENDING,
             ]);
 
             Log::info('[REGISTER] New pending user created', [
@@ -146,16 +167,28 @@ class AuthController extends Controller
             ], 201);
 
         } catch (QueryException $e) {
-            if (($e->errorInfo[0] ?? null) === '23000') {
-                return response()->json([
-                    'code'    => 'ALREADY_REGISTERED',
-                    'message' => 'เลขบัตรนี้มีบัญชีใช้งานอยู่แล้ว',
-                    'actions' => [
-                        ['key' => 'LOGIN', 'label' => 'ไปหน้าเข้าสู่ระบบ', 'url' => '/login'],
-                        ['key' => 'CLOSE', 'label' => 'ปิด'],
-                    ],
-                ], 409);
+            $sqlState  = $e->errorInfo[0] ?? null; // '23000' = integrity constraint
+            $driverMsg = strtolower($e->errorInfo[2] ?? '');
+
+            if ($sqlState === '23000') {
+                if (strpos($driverMsg, 'users_email_unique') !== false || strpos($driverMsg, 'email') !== false) {
+                    return response()->json([
+                        'code'    => 'EMAIL_IN_USE',
+                        'message' => 'อีเมลนี้ถูกใช้แล้ว',
+                    ], 409);
+                }
+                if (strpos($driverMsg, 'users_cid_unique') !== false || strpos($driverMsg, 'cid') !== false) {
+                    return response()->json([
+                        'code'    => 'ALREADY_REGISTERED',
+                        'message' => 'เลขบัตรนี้มีบัญชีใช้งานอยู่แล้ว',
+                        'actions' => [
+                            ['key' => 'LOGIN', 'label' => 'ไปหน้าเข้าสู่ระบบ', 'url' => '/login'],
+                            ['key' => 'CLOSE', 'label' => 'ปิด'],
+                        ],
+                    ], 409);
+                }
             }
+
             Log::error('[REGISTER ERROR:QueryException]', ['e' => $e->getMessage()]);
             return response()->json(['message' => 'เกิดข้อผิดพลาดในการสมัคร กรุณาลองใหม่ภายหลัง'], 500);
         } catch (\Throwable $e) {
@@ -170,14 +203,19 @@ class AuthController extends Controller
     public function login(Request $request)
     {
         $validator = Validator::make($request->all(), [
-            'cid'      => ['required', 'digits:13'],
+            'cid'      => ['required', 'digits:13', 'regex:/^\d{13}$/'],
             'password' => ['required', 'string'],
+        ], [
+            'cid.required'       => 'กรุณากรอกเลขบัตรประชาชน',
+            'cid.digits'         => 'เลขบัตรประชาชนต้องมี 13 หลัก',
+            'cid.regex'          => 'เลขบัตรประชาชนต้องเป็นตัวเลข 13 หลัก',
+            'password.required'  => 'กรุณากรอกรหัสผ่าน',
         ]);
 
         if ($validator->fails()) {
             Log::warning('[LOGIN] Validation failed', [
                 'errors' => $validator->errors()->toArray(),
-                'input'  => $request->all(),
+                'cid'    => $request->input('cid'),
             ]);
             return response()->json(['errors' => $validator->errors()], 422);
         }
@@ -190,17 +228,17 @@ class AuthController extends Controller
             return response()->json(['message' => 'เลขบัตรประชาชนหรือรหัสผ่านไม่ถูกต้อง'], 401);
         }
 
-        if ($user->status !== 'approved') {
+        if ($user->status !== User::STATUS_APPROVED) {
             Log::notice('[LOGIN] User not approved', [
                 'cid'    => $user->cid,
                 'status' => $user->status,
             ]);
 
             // เคสได้รับสิทธิ์สมัครใหม่แล้ว
-            if ($user->status === 'rejected' && $this->isReapplyWindowOpen($user)) {
-                $untilIso = $user->reapply_until
-                    ? Carbon::parse($user->reapply_until)->toIso8601String()
-                    : null;
+            if ($user->status === User::STATUS_REJECTED && $this->isReapplyWindowOpen($user)) {
+                $untilIso = (User::isEpochDate((string) $user->reapply_until))
+                    ? null
+                    : Carbon::parse((string) $user->reapply_until)->toIso8601String();
 
                 return response()->json([
                     'message'       => 'คุณได้รับสิทธิ์ให้สมัครใหม่แล้ว กรุณาสมัครสมาชิกด้วยเลขบัตรเดิม',
@@ -214,7 +252,7 @@ class AuthController extends Controller
                 ], 403);
             }
 
-            if ($user->status === 'rejected') {
+            if ($user->status === User::STATUS_REJECTED) {
                 return response()->json([
                     'message' => 'บัญชีถูกปฏิเสธการอนุมัติ',
                     'code'    => 'REJECTED',
@@ -235,7 +273,8 @@ class AuthController extends Controller
         }
 
         // ออกโทเคนใหม่ หมดอายุ 24 ชั่วโมง
-        $plainToken = $user->issueToken('auth_token', ['*'], now()->addDay());
+        $expires    = now(config('app.timezone', 'Asia/Bangkok'))->addDay();
+        $plainToken = $user->issueToken('auth_token', ['*'], $expires);
 
         Log::info('[LOGIN] User logged in', ['cid' => $user->cid]);
 
@@ -244,7 +283,7 @@ class AuthController extends Controller
             'user'       => $user->only(['id','cid','first_name','last_name','email','role','status']),
             'token'      => $plainToken,
             'token_type' => 'Bearer',
-            'expires_at' => now()->addDay()->toISOString(),
+            'expires_at' => $expires->toIso8601String(),
         ]);
     }
 
@@ -275,11 +314,22 @@ class AuthController extends Controller
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
+        // normalize email ก่อน validate (ถ้ามีส่งมา)
+        if ($request->has('email')) {
+            $request->merge([
+                'email' => mb_strtolower(trim((string) $request->input('email'))),
+            ]);
+        }
+
+        $emailRule = $this->looseEmailRule();
+
         $validator = Validator::make($request->all(), [
-            'first_name' => ['sometimes','string','max:255'],
-            'last_name'  => ['sometimes','string','max:255'],
-            'email'      => ['sometimes','nullable','email', Rule::unique('users','email')->ignore($user->id)],
+            'first_name' => ['sometimes','string','max:255','filled'],
+            'last_name'  => ['sometimes','string','max:255','filled'],
+            'email'      => ['sometimes','string','max:255','filled', $emailRule, Rule::unique('users','email')->ignore($user->id)],
             'password'   => ['nullable','confirmed', Password::min(8)->letters()->numbers()],
+        ], [
+            'email.regex' => 'กรุณากรอกอีเมลในรูปแบบ name@domain (ไม่ต้องมี .com ก็ได้)',
         ]);
 
         if ($validator->fails()) {

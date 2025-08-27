@@ -16,8 +16,13 @@ import Sidebar from './components/sidebar/Sidebar'
 import type { ThaiIDData } from '@/app/types/globalType'
 
 /** ========= Config ========= */
-const CARD_API = process.env.NEXT_PUBLIC_CARD_API // string | undefined
+// ใช้ env ถ้ามี; ถ้าไม่ให้ fallback เป็น http://localhost:5000
+const CARD_API_BASE =
+  (process.env.NEXT_PUBLIC_CARD_API && process.env.NEXT_PUBLIC_CARD_API.trim()) ||
+  'http://localhost:5000'
+
 const CHECK_INTERVAL = 3000
+const FETCH_TIMEOUT_MS = 2500
 
 /** ========= ThaiID Context ========= */
 type ReaderStatus = 'reading' | 'ready' | 'error'
@@ -75,18 +80,22 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
   }
 
   const fetchCardData = async () => {
-    const base = CARD_API
-    if (!base) {
+    if (!CARD_API_BASE) {
       setError('Card API URL is not set in .env')
       setStatus('error')
       setLoading(false)
       return
     }
 
+    const ctrl = new AbortController()
+    const tid = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+
     try {
-      const url = `${base}/get_cid_data?callback=cb&section1=true&section2a=true&section2c=true`
-      const res = await fetch(url, { cache: 'no-store' })
+      const url = `${CARD_API_BASE}/get_cid_data?callback=cb&section1=true&section2a=true&section2c=true`
+      const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal })
       const text = await res.text()
+
+      // รองรับ JSONP: /**/cb({...});
       const jsonText = text.replace(/^\/\*\*\/cb\((.*)\);?$/, '$1')
       const card = JSON.parse(jsonText)
 
@@ -138,6 +147,8 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
       setError('เชื่อมต่อ Card Reader ไม่ได้')
       setLoading(false)
       setStatus('error')
+    } finally {
+      clearTimeout(tid)
     }
   }
 
@@ -177,7 +188,7 @@ function toDataUrlMaybe(base64?: string | null) {
   return s ? (s.startsWith('data:image') ? s : `data:image/jpeg;base64,${s}`) : null
 }
 
-/** ========= Portal Utils (fix bottom-right positioning) ========= */
+/** ========= Portal Utils ========= */
 function useMounted() {
   const [m, setM] = useState(false)
   useEffect(() => setM(true), [])
@@ -189,26 +200,41 @@ function Portal({ children }: { children: ReactNode }) {
   return createPortal(children, document.body)
 }
 
-/** ========= Motion Card + FAB (bottom-right) via Portal ========= */
+/** ========= Motion Card + FAB ========= */
 const STORAGE_KEY = 'cardStatusCollapsed'
 
 const CardReaderStatus: React.FC = () => {
   const { data, status, error, lastUpdatedAt, refreshCardData } = useThaiID()
-  const [collapsed, setCollapsed] = useState(false)
 
-  useEffect(() => {
+  // อ่านค่าตั้งแต่ initial render (lazy init) และตั้งค่าเริ่มต้นให้ "หุบ" เสมอถ้าไม่มีค่า
+  const [collapsed, setCollapsed] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true
     try {
       const raw = localStorage.getItem(STORAGE_KEY)
-      if (raw) setCollapsed(raw === '1')
-    } catch {}
-  }, [])
+      return raw ? raw === '1' : true
+    } catch {
+      return true
+    }
+  })
+
+  // เซฟค่าเมื่อเปลี่ยน
   useEffect(() => {
     try {
       localStorage.setItem(STORAGE_KEY, collapsed ? '1' : '0')
     } catch {}
   }, [collapsed])
 
-  // โทนสีตามสถานะ
+  // (ออปชัน) sync ระหว่างหลายแท็บ/หน้าต่าง
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === STORAGE_KEY && e.newValue != null) {
+        setCollapsed(e.newValue === '1')
+      }
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   const tone = {
     bg: status === 'ready' ? 'bg-green-600' : status === 'error' ? 'bg-red-600' : 'bg-gray-700',
     border: status === 'ready' ? 'border-green-700' : status === 'error' ? 'border-red-700' : 'border-gray-600',
@@ -222,7 +248,6 @@ const CardReaderStatus: React.FC = () => {
       ? `${data.titleNameTh}${data.firstNameTh} ${data.lastNameTh} • ${maskCID(data?.cid ?? '')}`
       : 'กำลังอ่านบัตรประชาชน...'
 
-  // วงกลมรูป (avatar) พร้อม motion
   const Avatar = (
     <div className="relative shrink-0">
       <div className={`rounded-full p-[2px] ring-4 ${tone.ring}`}>
@@ -279,7 +304,7 @@ const CardReaderStatus: React.FC = () => {
     <Portal>
       <div className="fixed bottom-4 right-4 z-[120]">
         <AnimatePresence initial={false} mode="wait">
-          {/* FAB (ปุ่มกลม) — โผล่เมื่อพับ */}
+          {/* FAB */}
           {collapsed && (
             <motion.button
               key="fab"
@@ -304,7 +329,7 @@ const CardReaderStatus: React.FC = () => {
             </motion.button>
           )}
 
-          {/* Motion Card — โผล่เมื่อไม่พับ */}
+          {/* Panel */}
           {!collapsed && (
             <motion.div
               key="panel"
@@ -368,27 +393,22 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
 
   return (
     <ThaiIDProvider>
-      {/* โครงหลัก */}
       <div className="min-h-screen flex flex-col bg-white">
-        {/* Topbar */}
         <div className="sticky top-0 z-[100]">
           <TopNavbar />
         </div>
 
         <div className="flex flex-1 overflow-hidden">
-          {/* Sidebar */}
           <aside className="w-[260px] shrink-0 border-r border-gray-200 bg-gray-50 overflow-y-auto z-[90]">
             <Sidebar selected={selected} setSelected={setSelected} setShowRightPanel={() => {}} />
           </aside>
 
-          {/* Content */}
-          <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[--background] text-[--foreground] p-4">
+        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[--background] text-[--foreground] p-4">
             <div className="w-full max-w-none">{children}</div>
           </main>
         </div>
       </div>
 
-      {/* Status Card (fixed bottom-right via Portal) */}
       <CardReaderStatus />
     </ThaiIDProvider>
   )

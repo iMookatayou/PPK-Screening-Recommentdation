@@ -4,34 +4,43 @@ services:
       context: ./from-backend-fix2
       dockerfile: Dockerfile
     env_file:
-      - ./from-backend-fix2/.env.backend     # ต้องมี APP_PORT=4002, DB, APP_KEY
-    environment:
-      TZ: Asia/Bangkok
+      - ./from-backend-fix2/.env     # ใช้ค่าจาก .env ของ Laravel (มี DB_*, APP_URL/PORT ฯลฯ)
     ports:
-      - "4002:4002"
+      - "4002:4002"                  # สมมติ image backend ฟังที่ 4002 (ตรงกับ APP_PORT)
     volumes:
-      - ./from-backend-fix2/storage:/app/storage
-      - ./from-backend-fix2/.env.backend:/app/.env:ro
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    networks: [ app-net ]
+      - backend-storage:/app/storage # ใช้ named volume แทน bind mount แก้ปัญหา permission
+      - ./from-backend-fix2/.env:/app/.env:ro
+    networks:
+      - app-net
     restart: unless-stopped
+    healthcheck:
+      # ปรับ path ตามที่แอพมี: /up หรือ /health หรือ root /
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:4002/up >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
   frontend:
     build:
       context: ./from-frontend
       dockerfile: Dockerfile
+    # ตอน build Next.js จะอ่าน .env ที่ถูก COPY ไปใน Dockerfile แล้ว
+    # ส่วนนี้มีผลตอน runtime เท่านั้น (โอเคที่จะคงไว้เพื่อความสม่ำเสมอ)
     env_file:
-      - ./from-frontend/.env.frontend        # ต้องมี PORT=4001 และ NEXT_PUBLIC_*
-    environment:
-      NODE_ENV: production
-      TZ: Asia/Bangkok
+      - ./from-frontend/.env         # ต้องมี NEXT_PUBLIC_API_BASE_URL ชี้ไป http://10.10.54.115:4002
     ports:
       - "4001:4001"
-    depends_on: [ backend ]
-    networks: [ app-net ]
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - app-net
     restart: unless-stopped
 
 networks:
   app-net:
     driver: bridge
+
+volumes:
+  backend-storage:

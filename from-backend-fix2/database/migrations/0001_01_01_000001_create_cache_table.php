@@ -12,15 +12,15 @@ return new class extends Migration
     public function up(): void
     {
         Schema::create('cache', function (Blueprint $table) {
-            $table->string('key', 191)->primary(); // varchar(191)
-            $table->mediumText('value');           // payload
-            $table->integer('expiration');         // timestamp
+            $table->string('key', 191)->primary();     // varchar(191)
+            $table->mediumText('value')->default('');  // payload (mediumText ปกติไม่มี default → ใช้ string ก็ได้ถ้าอยาก strict)
+            $table->integer('expiration')->default(0); // timestamp
         });
 
         Schema::create('cache_locks', function (Blueprint $table) {
-            $table->string('key', 191)->primary(); // varchar(191)
-            $table->string('owner', 100);          // varchar(100)
-            $table->integer('expiration');         // timestamp
+            $table->string('key', 191)->primary();      // varchar(191)
+            $table->string('owner', 100)->default('');  // varchar(100)
+            $table->integer('expiration')->default(0);  // timestamp
         });
     }
 
