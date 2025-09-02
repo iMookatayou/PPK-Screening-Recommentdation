@@ -87,22 +87,33 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
       return
     }
 
+    // ใช้ AbortController + ใส่เหตุผลตอน abort เพื่อกัน “signal is aborted without reason”
     const ctrl = new AbortController()
-    const tid = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS)
+    const tid = setTimeout(
+      () => ctrl.abort(new DOMException('Timeout', 'AbortError')),
+      FETCH_TIMEOUT_MS
+    )
 
     try {
       const url = `${CARD_API_BASE}/get_cid_data?callback=cb&section1=true&section2a=true&section2c=true`
       const res = await fetch(url, { cache: 'no-store', signal: ctrl.signal })
+
+      if (!res.ok) {
+        throw new Error(`Card API HTTP ${res.status}`)
+      }
+
       const text = await res.text()
 
-      // รองรับ JSONP: /**/cb({...});
-      const jsonText = text.replace(/^\/\*\*\/cb\((.*)\);?$/, '$1')
-      const card = JSON.parse(jsonText)
+      // รองรับ JSONP /**/cb({...}); และกรณี backend ส่ง JSON ตรง ๆ
+      const m = text.match(/^\/\*\*\/cb\(([\s\S]*?)\);\s*$/)
+      const payload = m ? m[1] : text
+      const card = JSON.parse(payload)
 
       // ยังไม่เสียบบัตร
       if (!card || !card.CitizenID) {
         setLoading(false)
         setStatus('reading')
+        setError(null) // ถือว่าเป็นสถานะอ่านต่อ ไม่ใช่ error
         return
       }
 
@@ -110,6 +121,7 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
       if (card.CitizenID === lastCID.current) {
         setLoading(false)
         setStatus('ready')
+        setError(null)
         return
       }
       lastCID.current = card.CitizenID
@@ -142,13 +154,19 @@ export const ThaiIDProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false)
       setError(null)
       setStatus('ready')
-    } catch (err) {
+    } catch (err: any) {
+      // timeout / abort → ไม่ต้องเด้งเป็น error
+      if (err?.name === 'AbortError') {
+        setLoading(false)
+        setStatus('reading')
+        return
+      }
       console.error('Failed to fetch card data:', err)
       setError('เชื่อมต่อ Card Reader ไม่ได้')
       setLoading(false)
       setStatus('error')
     } finally {
-      clearTimeout(tid)
+      clearTimeout(tid) // กัน abort ยิงทีหลังเมื่อสำเร็จแล้ว
     }
   }
 
@@ -343,7 +361,11 @@ const CardReaderStatus: React.FC = () => {
               {Avatar}
 
               <div className="flex-1">
-                <div className="font-medium leading-tight line-clamp-1">{text}</div>
+                <div className="font-medium leading-tight line-clamp-1">
+                  {status === 'ready' && data
+                    ? `${data.titleNameTh}${data.firstNameTh} ${data.lastNameTh} • ${maskCID(data?.cid ?? '')}`
+                    : 'กำลังอ่านบัตรประชาชน...'}
+                </div>
                 <div className="text-white/80 text-xs mt-0.5">
                   {status === 'ready' && lastUpdatedAt ? `อัปเดตล่าสุด: ${formatTime(lastUpdatedAt)}` : null}
                   {status === 'reading' ? 'โปรดเสียบบัตร หรือรอระบบอ่านข้อมูล' : null}
@@ -403,7 +425,7 @@ export default function ClientLayout({ children }: { children: React.ReactNode }
             <Sidebar selected={selected} setSelected={setSelected} setShowRightPanel={() => {}} />
           </aside>
 
-        <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[--background] text-[--foreground] p-4">
+          <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-[--background] text-[--foreground] p-4">
             <div className="w-full max-w-none">{children}</div>
           </main>
         </div>

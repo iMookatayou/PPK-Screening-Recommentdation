@@ -86,7 +86,7 @@ export type QuestionResult = {
   is_refer_case: boolean
   note: string
   symptoms: string[]
-  routed_by: string
+  created_by?: number 
   created_at: string
   type: string
 }
@@ -115,6 +115,7 @@ export type FormPPKPayload = {
   summary_clinics: string[];   
   symptoms: string[];
   question_results: QuestionResultWithMeta[];
+  created_by?: number 
 };
 
 // สำหรับหน้า Guidance (ไม่เก็บผู้ป่วยจริง)

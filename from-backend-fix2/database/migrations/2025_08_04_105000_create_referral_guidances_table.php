@@ -13,26 +13,34 @@ return new class extends Migration {
             $table->bigIncrements('id');
 
             // เมตา
-            $table->string('question', 100)->index();                 // เช่น StrokeSuspect
-            $table->unsignedSmallInteger('question_code')->index();   // เร็วและพอ 0–65535
+            $table->string('question', 100)->index();               // เช่น StrokeSuspect
+            $table->unsignedSmallInteger('question_code')->index(); // 0–65535
             $table->string('question_title', 255);
 
-            // ผลลัพธ์
-            $table->json('clinic');                                   // ต้องส่ง JSON valid เสมอ เช่น ["er"]
-            $table->json('symptoms');                                 // MySQL 5.x: ห้าม DEFAULT → ใส่ในแอปตอน insert
+            // ผลลัพธ์ (JSON)
+            $table->json('clinic');     // เช่น ["er"]
+            $table->json('symptoms');   // เช่น []
 
-            // หมายเหตุ: ใช้ VARCHAR เพื่อให้ตั้ง default '' ได้ (TEXT บางเวอร์ชันห้าม default)
+            // ข้อความเพิ่มเติม
             $table->string('note', 500)->default('');
 
             $table->boolean('is_refer_case')->default(false);
-            $table->string('type', 20)->default('guide');             // 'guide' | 'referral'
+            $table->string('type', 20)->default('guide');           // 'guide' | 'referral'
 
-            $table->string('created_by', 100)->default('');           // เช่น nurse.aor
+            // ผู้สร้าง (FK → users.id) ตั้งชื่อ FK เองกันชน
+            $table->unsignedBigInteger('created_by')->nullable();
+            $table->index('created_by', 'ref_guid_created_by_idx');
+
             $table->timestamps();
 
             // ดัชนีสรุป
-            $table->index(['type', 'created_at']);
-            $table->index('created_by');
+            $table->index(['type', 'created_at'], 'ref_guid_type_created_idx');
+
+            // FK ชื่อชัดเจน
+            $table->foreign('created_by', 'ref_guid_created_by_fk')
+                  ->references('id')->on('users')
+                  ->onUpdate('cascade')
+                  ->onDelete('set null');
         });
     }
 

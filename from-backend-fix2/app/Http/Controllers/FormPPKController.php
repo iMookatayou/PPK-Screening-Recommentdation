@@ -120,7 +120,7 @@ class FormPPKController extends Controller
             'question_results.*.note'                 => 'nullable|string',
             'question_results.*.is_refer_case'        => 'required|boolean',
             'question_results.*.type'                 => 'required|string|in:form,guide,referral,kiosk',
-            'question_results.*.routed_by'            => 'nullable|string',
+            'question_results.*.created_by'           => 'nullable|integer|exists:users,id',
             'question_results.*.created_at'           => 'nullable|date_format:Y-m-d H:i:s',
         ]);
 
@@ -136,10 +136,11 @@ class FormPPKController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $validated) {
-                $user     = $request->user();
-                $routedBy = $user->username ?? $user->name ?? 'unknown';
+                // 1) ดึงผู้ใช้ปัจจุบัน → ใช้ id เป็น created_by
+                $user = $request->user();
+                $createdBy = $user?->id ?? null;
 
-                // 1) patient_cases
+                // 2) patient_cases
                 $patient = PatientCase::create([
                     'case_id'         => $validated['case_id'],
                     'cid'             => $validated['cid'],
@@ -150,13 +151,20 @@ class FormPPKController extends Controller
                     'hmain_name'      => $validated['hmain_name'],
                     'summary_clinics' => $this->cleanStringArray($validated['summary_clinics'] ?? []),
                     'symptoms'        => $this->cleanStringArray($validated['symptoms'] ?? []),
+
+                    'created_by'      => $createdBy,
                 ]);
 
-                // 2) question_results
+                // 3) question_results
                 $now  = now();
-                $rows = collect($validated['question_results'])->map(function ($q) use ($validated, $routedBy, $now, $patient) {
+                $rows = collect($validated['question_results'])->map(function ($q) use ($validated, $createdBy, $now, $patient) {
                     $clinic   = $this->cleanStringArray($q['clinic'] ?? []);
-                    $symptoms = $this->normalizeSymptoms($q['symptoms'] ?? [], $q['question_title'] ?? null, $q['question_key'] ?? null, $q['question'] ?? null);
+                    $symptoms = $this->normalizeSymptoms(
+                        $q['symptoms'] ?? [],
+                        $q['question_title'] ?? null,
+                        $q['question_key'] ?? null,
+                        $q['question'] ?? null
+                    );
 
                     return [
                         'patient_case_id' => $patient->id,
@@ -170,7 +178,9 @@ class FormPPKController extends Controller
                         'note'            => $q['note'] ?? null,
                         'is_refer_case'   => (bool)($q['is_refer_case'] ?? false),
                         'type'            => trim((string)$q['type']),
-                        'routed_by'       => $q['routed_by'] ?? $routedBy,
+
+                        'created_by'      => $q['created_by'] ?? $createdBy,
+
                         'created_at'      => $q['created_at'] ?? $now,
                         'updated_at'      => $now,
                     ];
@@ -221,6 +231,7 @@ class FormPPKController extends Controller
             return $this->respondApi('CASE_NOT_FOUND', 'ไม่พบข้อมูลเคสที่ร้องขอ', null, null, 404);
         }
 
+        // เปลี่ยน validation: routed_by -> created_by (integer + exists:users,id)
         $validator = Validator::make($request->all(), [
             'cid'                 => 'sometimes|string',
             'name'                => 'sometimes|string',
@@ -245,7 +256,7 @@ class FormPPKController extends Controller
             'question_results.*.note'                 => 'nullable|string',
             'question_results.*.is_refer_case'        => 'required_with:question_results|boolean',
             'question_results.*.type'                 => 'required_with:question_results|string|in:form,guide,referral,kiosk',
-            'question_results.*.routed_by'            => 'nullable|string',
+            'question_results.*.created_by'           => 'nullable|integer|exists:users,id', // <-- แก้ตรงนี้
             'question_results.*.created_at'           => 'nullable|date_format:Y-m-d H:i:s',
         ]);
 
@@ -264,7 +275,10 @@ class FormPPKController extends Controller
             : $patient->hmain_name;
 
         try {
-            return DB::transaction(function () use ($patient, $validated, $main, $hmain) {
+            return DB::transaction(function () use ($request, $patient, $validated, $main, $hmain) {
+                // ดึง user id สำหรับ fallback หาก FE ไม่ส่ง created_by มา
+                $currentUserId = $request->user()?->id ?? null;
+
                 $patient->update([
                     'cid'             => $validated['cid']            ?? $patient->cid,
                     'name'            => $validated['name']           ?? $patient->name,
@@ -281,12 +295,18 @@ class FormPPKController extends Controller
                 ]);
 
                 if (!empty($validated['question_results'])) {
+                    // ลบของเดิมก่อนใส่ใหม่ (ยังคงพฤติกรรมเดิม)
                     $patient->questionResults()->delete();
 
                     $now  = now();
-                    $rows = collect($validated['question_results'])->map(function ($q) use ($patient, $now) {
+                    $rows = collect($validated['question_results'])->map(function ($q) use ($patient, $now, $currentUserId) {
                         $clinic   = $this->cleanStringArray($q['clinic'] ?? []);
-                        $symptoms = $this->normalizeSymptoms($q['symptoms'] ?? [], $q['question_title'] ?? null, $q['question_key'] ?? null, $q['question'] ?? null);
+                        $symptoms = $this->normalizeSymptoms(
+                            $q['symptoms'] ?? [],
+                            $q['question_title'] ?? null,
+                            $q['question_key'] ?? null,
+                            $q['question'] ?? null
+                        );
 
                         return [
                             'patient_case_id' => $patient->id,
@@ -300,7 +320,10 @@ class FormPPKController extends Controller
                             'note'            => $q['note'] ?? null,
                             'is_refer_case'   => (bool)($q['is_refer_case'] ?? false),
                             'type'            => trim((string)$q['type']),
-                            'routed_by'       => $q['routed_by'] ?? 'unknown',
+
+                            // เปลี่ยนเป็น created_by (FK) แทน routed_by(string)
+                            'created_by'      => $q['created_by'] ?? $currentUserId,
+
                             'created_at'      => $q['created_at'] ?? $now,
                             'updated_at'      => $now,
                         ];
@@ -576,9 +599,8 @@ class FormPPKController extends Controller
             $v = trim($v);
             return $v === '' ? null : $v;
         }, $arr)));
-        return $arr;
+        return array_values(array_unique($arr)); // กันซ้ำเพิ่ม
     }
-
     /**
      * ทำให้ symptoms เป็นภาษาไทยสวย ๆ:
      * - กรอง *_note, note, within72, flag ออก

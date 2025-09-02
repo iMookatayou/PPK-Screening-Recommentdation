@@ -13,7 +13,7 @@ return new class extends Migration
     {
         Schema::create('cache', function (Blueprint $table) {
             $table->string('key', 191)->primary();     // varchar(191)
-            $table->mediumText('value')->default('');  // payload (mediumText ปกติไม่มี default → ใช้ string ก็ได้ถ้าอยาก strict)
+            $table->mediumText('value');               // payload (ห้าม default บน MySQL)
             $table->integer('expiration')->default(0); // timestamp
         });
 

@@ -9,6 +9,8 @@ use Illuminate\Support\Facades\Hash;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Laravel\Sanctum\HasApiTokens;
+use Illuminate\Support\Str;
+use DateTimeInterface;
 
 class User extends Authenticatable
 {
@@ -22,7 +24,7 @@ class User extends Authenticatable
     public const ROLE_USER  = 'user';
     public const ROLE_ADMIN = 'admin';
 
-    // Sentinel values (ตามสคีมาที่ไม่รับ NULL)
+    // Sentinel values (คอลัมน์ไม่รับ NULL)
     public const EPOCH_DATETIME = '1970-01-01 00:00:01';
     public const EPOCH_DATE     = '1970-01-01';
     public const EMPTY          = '';
@@ -34,18 +36,18 @@ class User extends Authenticatable
         'cid',
         'first_name',
         'last_name',
+        'username',
         'email',
         'password',
-
-        'status',       // pending | approved | rejected
-        'role',         // user | admin
-
+        'status',
+        'role',
         'approved_at',
         'rejected_reason',
         'email_verified_at',
-
         'reapply_allowed',
         'reapply_until',
+        'remember_token',
+        'last_login_at',
     ];
 
     /**
@@ -63,8 +65,8 @@ class User extends Authenticatable
         'email_verified_at' => 'datetime',
         'approved_at'       => 'datetime',
         'reapply_allowed'   => 'boolean',
-        // reapply_until เป็น DATE (string) อาจเป็น sentinel -> cast 'date' ได้
         'reapply_until'     => 'date',
+        'last_login_at'     => 'datetime',
     ];
 
     /**
@@ -72,18 +74,26 @@ class User extends Authenticatable
      */
     protected $appends = ['full_name', 'name', 'is_approved', 'can_reapply'];
 
-    // ===== Helpers for sentinel =====
-    public static function isEpochDate(?string $date): bool
+    /* ---------------- Sentinel Helpers ---------------- */
+    public static function isEpochDate($date): bool
     {
-        return !$date || $date === self::EPOCH_DATE;
+        if ($date instanceof DateTimeInterface) {
+            return $date->format('Y-m-d') === self::EPOCH_DATE;
+        }
+        $s = trim((string) $date);
+        return $s === '' || $s === self::EPOCH_DATE;
     }
 
-    public static function isEpochDateTime(?string $dt): bool
+    public static function isEpochDateTime($dt): bool
     {
-        return !$dt || $dt === self::EPOCH_DATETIME;
+        if ($dt instanceof DateTimeInterface) {
+            return $dt->format('Y-m-d H:i:s') === self::EPOCH_DATETIME;
+        }
+        $s = trim((string) $dt);
+        return $s === '' || $s === self::EPOCH_DATETIME;
     }
 
-    // ===== Accessors =====
+    /* ---------------- Accessors ---------------- */
     public function getFullNameAttribute(): string
     {
         return trim(sprintf('%s %s', $this->first_name ?? '', $this->last_name ?? ''));
@@ -91,11 +101,13 @@ class User extends Authenticatable
 
     public function getNameAttribute(): string
     {
-        $username     = $this->attributes['username']     ?? null; // ถ้าไม่มีคอลัมน์จะคง null
-        $display_name = $this->attributes['display_name'] ?? null;
+        // โชว์ username ก่อน แล้วค่อย fallback เป็นชื่อ-สกุล > email > cid
+        $username = $this->attributes['username'] ?? null;
+        $fullName = $this->full_name;
+        $email    = $this->attributes['email'] ?? null;
+        $cid      = $this->attributes['cid'] ?? null;
 
-        return $display_name
-            ?: ($username ?: ($this->full_name ?: ($this->email !== null ? (string) $this->email : (string) $this->cid)));
+        return ($username ?: ($fullName !== '' ? $fullName : ($email ?: (string) $cid)));
     }
 
     public function getIsApprovedAttribute(): bool
@@ -107,31 +119,21 @@ class User extends Authenticatable
     {
         if (!$this->reapply_allowed) return false;
 
-        // sentinel 1970-01-01 = ไม่มี until => อนุญาตเลย
-        $until = $this->getAttribute('reapply_until');
+        $until = $this->getAttribute('reapply_until'); // Carbon|string|null
         if (self::isEpochDate($until)) {
             return true;
         }
+        $end = $until instanceof Carbon
+            ? $until->copy()->endOfDay()
+            : Carbon::parse((string)$until)->endOfDay();
 
-        // มี until จริง -> วันนี้ <= until (รวมวันนั้น)
-        return now()->startOfDay()->lte(Carbon::parse($until)->endOfDay());
+        return now()->startOfDay()->lte($end);
     }
 
-    // ===== Scopes =====
-    public function scopePending(Builder $q): Builder
-    {
-        return $q->where('status', self::STATUS_PENDING);
-    }
-
-    public function scopeApproved(Builder $q): Builder
-    {
-        return $q->where('status', self::STATUS_APPROVED);
-    }
-
-    public function scopeRejected(Builder $q): Builder
-    {
-        return $q->where('status', self::STATUS_REJECTED);
-    }
+    /* ---------------- Scopes ---------------- */
+    public function scopePending(Builder $q): Builder  { return $q->where('status', self::STATUS_PENDING); }
+    public function scopeApproved(Builder $q): Builder { return $q->where('status', self::STATUS_APPROVED); }
+    public function scopeRejected(Builder $q): Builder { return $q->where('status', self::STATUS_REJECTED); }
 
     public function scopeSearch(Builder $q, ?string $term): Builder
     {
@@ -142,11 +144,22 @@ class User extends Authenticatable
             $qq->where('first_name', 'like', "%{$term}%")
                ->orWhere('last_name',  'like', "%{$term}%")
                ->orWhere('email',      'like', "%{$term}%")
-               ->orWhere('cid',        'like', "%{$term}%");
+               ->orWhere('cid',        'like', "%{$term}%")
+               ->orWhere('username',   'like', "%{$term}%");
         });
     }
 
-    // ===== Mutators (Data Hygiene) — ห้ามคืน null ให้คอลัมน์ NOT NULL =====
+    // ใช้ตอน login: รองรับทั้ง email หรือ username
+    public function scopeWhereLogin(Builder $q, string $login): Builder
+    {
+        $login = trim($login);
+        return $q->where(function (Builder $qq) use ($login) {
+            $qq->where('email', $login)
+               ->orWhere('username', strtolower($login));
+        });
+    }
+
+    /* ---------------- Mutators (Data Hygiene) ---------------- */
 
     /** email: บังคับต้องมีค่า (สอดคล้อง migration NOT NULL + UNIQUE) */
     public function setEmailAttribute(?string $value): void
@@ -167,7 +180,7 @@ class User extends Authenticatable
         $this->attributes['password'] = Hash::needsRehash($value) ? Hash::make($value) : $value;
     }
 
-    /** cid: ต้องเป็นตัวเลข 13 หลักเท่านั้น (กันค่ากลายเป็น '' จนชน UNIQUE) */
+    /** cid: ต้องเป็นตัวเลข 13 หลัก */
     public function setCidAttribute(?string $value): void
     {
         $digits = preg_replace('/\D/', '', (string) $value);
@@ -177,7 +190,7 @@ class User extends Authenticatable
         $this->attributes['cid'] = $digits;
     }
 
-    /** first_name / last_name: ถ้าอยากเข้มให้สอดคล้องกับ validator (required) */
+    /** first_name / last_name: required */
     public function setFirstNameAttribute(?string $value): void
     {
         $v = trim((string)$value);
@@ -237,11 +250,69 @@ class User extends Authenticatable
             $this->attributes['reapply_until'] = self::EPOCH_DATE;
             return;
         }
-        if ($value instanceof Carbon) {
-            $this->attributes['reapply_until'] = $value->toDateString();
-        } else {
-            $this->attributes['reapply_until'] = (string) $value;
+        $this->attributes['reapply_until'] = $value instanceof Carbon
+            ? $value->toDateString()
+            : (string) $value;
+    }
+
+    /** username: sanitize ถ้าผู้ใช้ส่งมาเอง (ถ้าไม่ส่ง ปล่อยว่างให้ lifecycle สร้างให้) */
+    public function setUsernameAttribute($value): void
+    {
+        $v = trim((string)$value);
+
+        if ($v === '') {
+            // ให้ hook creating สร้างให้อัตโนมัติ
+            $this->attributes['username'] = null;
+            return;
         }
+
+        // normalize: lower + อนุญาต [a-z0-9._] + จำกัดความยาว
+        $v = strtolower($v);
+        $v = preg_replace('/[^a-z0-9._]/', '', $v) ?? '';
+        $v = substr($v, 0, 30);
+
+        $this->attributes['username'] = $v === '' ? null : $v;
+    }
+
+    /* ---------------- Username Generators + Lifecycle ---------------- */
+
+    protected static function generateUniqueUsernameBase(string $first, string $last = ''): string
+    {
+        // ใช้ชื่อ-นามสกุล → slug เป็นอังกฤษ คั่นด้วยจุด
+        $raw  = trim($first . ' ' . $last);
+        $base = Str::slug($raw !== '' ? $raw : 'user', '.'); // "สมชาย ใจดี" -> "somchai.jaidi"
+        $base = str_replace('-', '.', $base);
+        $base = preg_replace('/[^a-z0-9._]/', '', strtolower($base)) ?: 'user';
+        return substr($base, 0, 20);
+    }
+
+    protected static function generateUniqueUsername(string $first, string $last = ''): string
+    {
+        $base = static::generateUniqueUsernameBase($first, $last);
+
+        if (!static::query()->where('username', $base)->exists()) {
+            return $base;
+        }
+        for ($i = 1; $i <= 9999; $i++) {
+            $candidate = $base . $i; // somchai.jaidee1
+            if (!static::query()->where('username', $candidate)->exists()) {
+                return $candidate;
+            }
+        }
+        return $base . Str::random(4);
+    }
+
+    protected static function booted(): void
+    {
+        static::creating(function (User $user) {
+            // username: ถ้าไม่มี → generate จากชื่อ-สกุล
+            if (empty($user->attributes['username'])) {
+                $user->attributes['username'] = static::generateUniqueUsername(
+                    $user->attributes['first_name'] ?? '',
+                    $user->attributes['last_name']  ?? ''
+                );
+            }
+        });
     }
 
     // ===== Token Helpers (Sanctum) =====

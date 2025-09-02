@@ -21,19 +21,26 @@ return new class extends Migration {
             $table->unsignedTinyInteger('age');         // 0–255
             $table->string('gender', 16);               // M, F, U
 
-            // สิทธิการรักษา (ไม่ nullable → ตั้ง default '' ได้)
+            // สิทธิการรักษา
             $table->string('maininscl_name', 100)->default('');
             $table->string('hmain_name', 150)->default('');
 
             // สรุป/อาการ (JSON ใน MySQL 5.x: ห้าม DEFAULT → ให้ส่งค่ามาเอง/ตั้งที่ Model)
-            $table->json('summary_clinics');            // ต้องเป็น JSON valid เสมอ เช่น []
-            $table->json('symptoms');                   // ต้องเป็น JSON valid เสมอ เช่น []
+            $table->json('summary_clinics');            // เช่น []
+            $table->json('symptoms');                   // เช่น []
+
+            // ใช้ nullable + nullOnDelete เพื่อรักษาเคสแม้ผู้ใช้ถูกลบ
+            $table->foreignId('created_by')
+                  ->nullable()
+                  ->constrained('users')
+                  ->nullOnDelete();
 
             $table->timestamps();
 
             // ดัชนีเสริม
             $table->index('created_at');
             $table->index(['cid', 'created_at'], 'patient_cases_cid_created_idx');
+            $table->index(['created_by', 'created_at'], 'patient_cases_creator_created_idx');
         });
     }
 

@@ -23,21 +23,20 @@ class QuestionResult extends Model
         'note',
         'is_refer_case',
         'type',
-        'routed_by',
+        'created_by',        
     ];
 
-    // ไม่ใช้ casts กับ clinic/symptoms เพราะคุม JSON เอง
+    // ไม่ใช้ casts กับ clinic/symptoms เพราะคุม JSON เองผ่าน mutators/accessors
     protected $casts = [
         'is_refer_case' => 'boolean',
     ];
 
-    // Default ฝั่งแอป (แทน DEFAULT บน JSON ที่ MySQL 5.x ทำไม่ได้)
+    // ค่า default ฝั่งแอป (MySQL 5.x ตั้ง DEFAULT บน JSON ไม่ได้)
     protected $attributes = [
-        'clinic'    => '[]',
-        'symptoms'  => '[]',
-        'note'      => '',
-        'type'      => 'form',
-        'routed_by' => '',
+        'clinic'   => '[]',
+        'symptoms' => '[]',
+        'note'     => '',
+        'type'     => 'form',
     ];
 
     /* -----------------------------
@@ -51,6 +50,11 @@ class QuestionResult extends Model
     public function patientCaseByCode()
     {
         return $this->belongsTo(PatientCase::class, 'case_id', 'case_id');
+    }
+
+    public function creator()
+    {
+        return $this->belongsTo(User::class, 'created_by');
     }
 
     /* -----------------------------
@@ -76,7 +80,7 @@ class QuestionResult extends Model
         return $this->decodeJsonArray($value);
     }
 
-    // กัน note เป็น null → สตริงว่าง (ตารางห้าม NULL)
+    // กัน note เป็น null → สตริงว่าง (คอลัมน์ห้าม NULL)
     public function setNoteAttribute($value): void
     {
         $this->attributes['note'] = $value ?? '';
@@ -85,38 +89,32 @@ class QuestionResult extends Model
     /* -----------------------------
      | Helpers
      * ----------------------------*/
-    // รับ array / สตริง JSON / สตริงธรรมดา → เก็บเป็น JSON (ไม่ escape unicode) | ไม่คืน null
     protected function normalizeArrayToJson($value): string
     {
-        // null => []
         if ($value === null) return '[]';
 
-        // ถ้าเป็นสตริง ลอง decode เป็น JSON ก่อน
         if (is_string($value)) {
             $decoded = json_decode($value, true);
             if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
                 $value = $decoded;
             } else {
-                // ไม่ใช่ JSON → treat เป็น 1 ค่า
                 $value = [$value];
             }
         }
 
-        // บังคับเป็น array ของ string, ตัดค่าว่าง, unique, reindex
         $arr = array_values(array_filter(array_map(function ($v) {
             if (is_array($v) || is_object($v)) return null;
-            if (!is_string($v)) $v = is_scalar($v) ? (string)$v : null;
+            if (!is_string($v)) $v = is_scalar($v) ? (string) $v : null;
             if ($v === null) return null;
             $v = trim($v);
             return $v === '' ? null : $v;
-        }, (array)$value)));
+        }, (array) $value)));
 
         $arr = array_values(array_unique($arr));
 
         return json_encode($arr, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
-    // string(JSON) | array | null → array (ว่างให้เป็น [])
     protected function decodeJsonArray($value): array
     {
         if (is_array($value)) return $value;

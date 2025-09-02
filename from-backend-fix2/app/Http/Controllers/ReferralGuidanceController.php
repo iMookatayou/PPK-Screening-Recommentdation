@@ -24,7 +24,7 @@ class ReferralGuidanceController extends Controller
             'question_results.*.question'          => 'required|string',
             'question_results.*.question_code'     => 'required|integer',
             'question_results.*.question_title'    => 'required|string',
-            'question_results.*.clinic'            => 'required|array',
+            'question_results.*.clinic'            => 'required|array|min:1',
             'question_results.*.clinic.*'          => 'string',
             'question_results.*.symptoms'          => 'nullable|array',
             'question_results.*.symptoms.*'        => 'string',
@@ -47,24 +47,39 @@ class ReferralGuidanceController extends Controller
             ], 422);
         }
 
-        $user      = $request->user();
-        $createdBy = $user->username ?? $user->name ?? 'unknown';
-        $now       = now();
+        // ⬇⬇⬇ เปลี่ยนเป็นเก็บ user id (FK) ⬇⬇⬇
+        $user = $request->user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+        $userId = $user->id; // ใช้ค่า id ของผู้ใช้
+        // ⬆⬆⬆
 
-        // เตรียม rows แบบสะอาด (ให้ clinic/symptoms เป็น array แน่ ๆ)
-        $rows = collect($validator->validated()['question_results'])->map(function ($d) use ($createdBy, $now) {
-            $clinic   = array_values(array_filter($d['clinic']   ?? []));
-            $symptoms = array_values(array_filter($d['symptoms'] ?? []));
+        $now = now();
+
+        // helper: clean array
+        $cleanArray = function ($arr) {
+            $arr = is_array($arr) ? $arr : [];
+            $arr = array_map(fn($v) => is_string($v) ? trim($v) : '', $arr);
+            $arr = array_filter($arr, fn($v) => $v !== '');
+            return array_values(array_unique($arr));
+        };
+
+        // เตรียม rows
+        $rows = collect($validator->validated()['question_results'])->map(function ($d) use ($userId, $now, $cleanArray) {
+            $clinic   = $cleanArray($d['clinic']   ?? []);
+            $symptoms = $cleanArray($d['symptoms'] ?? []);
+
             return [
                 'question'        => $d['question'],
                 'question_code'   => $d['question_code'],
                 'question_title'  => $d['question_title'],
-                'clinic'          => $clinic,                 // Eloquent casts เป็น JSON ให้
-                'symptoms'        => $symptoms ?: null,       // ว่าง = null
-                'note'            => $d['note'] ?? null,
+                'clinic'          => $clinic,              // JSON (array → cast)
+                'symptoms'        => $symptoms,            // เก็บ [] แทน null
+                'note'            => $d['note'] ?? '',
                 'is_refer_case'   => (bool)($d['is_refer_case'] ?? false),
-                'type'            => $d['type'],              // 'guide' | 'referral'
-                'created_by'      => $createdBy,
+                'type'            => $d['type'],           // 'guide' | 'referral'
+                'created_by'      => $userId,              // ⬅⬅⬅ ใช้ user id
                 'created_at'      => $d['created_at'] ?? $now,
                 'updated_at'      => $now,
             ];
@@ -72,16 +87,13 @@ class ReferralGuidanceController extends Controller
 
         try {
             DB::transaction(function () use ($rows) {
-                // ใช้ create() เพื่อให้ $casts ใน Model ทำงาน (array → json)
-                $rows->each(function ($row) {
-                    ReferralGuidance::create($row);
-                });
+                $rows->each(fn($row) => ReferralGuidance::create($row));
             });
 
             return response()->json([
                 'message' => 'บันทึกคำแนะนำสำเร็จ ' . $rows->count() . ' รายการ',
                 'errors'  => [],
-            ], 200);
+            ], 201);
         } catch (\Throwable $e) {
             Log::error('[Referral] บันทึกล้มเหลว', ['error' => $e->getMessage()]);
             return response()->json([
@@ -165,7 +177,7 @@ class ReferralGuidanceController extends Controller
             Log::error('[Referral] ดึง summary ล้มเหลว', ['error' => $e->getMessage()]);
             return response()->json([
                 'message' => 'ไม่สามารถดึงข้อมูลสรุปได้',
-                'error'   => app()->hasDebugModeEnabled() ? $e->getMessage() : 'Unexpected error',
+                'error'   => config('app.debug') ? $e->getMessage() : 'Unexpected error',
             ], 500);
         }
     }

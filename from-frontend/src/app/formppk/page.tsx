@@ -345,20 +345,24 @@ export default function FormContent() {
 
     setIsLoading(true)
     try {
+      // ดึงผู้ใช้ → ใช้ id เป็น created_by
       const meRes = await authAxios.get('/me')
       const me = meRes.data || {}
-      const routedBy = me.display_name || me.username || me.name || 'unknown'
+      const createdById = Number(me?.id) || undefined
+      const createdByName = me.display_name || me.username || me.name || 'ไม่ระบุ'
 
       const caseId = uuidv4()
-      const createdAt = new Date().toISOString().slice(0, 19).replace('T', ' ')
+      const createdAt = new Date().toISOString().slice(0, 19).replace('T', ' ') // ให้ตรง type ที่ต้องมี created_at
 
       const toArray = (v: unknown): string[] =>
         Array.isArray(v) ? v.filter(Boolean).map(String) : v != null ? [String(v)] : []
 
-      const resultsToSave = selectedQuestions.map((key, idx) => {
+      // ใช้ QuestionResultWithMeta เพื่อให้มี question_title / question_code / created_at ตามที่ type คาด
+      const resultsToSave: QuestionResultWithMeta[] = selectedQuestions.map((key, idx) => {
         const draft = (questionResults as any)[key] || {}
         const clinic = toArray(draft.clinic)
         const symptoms = toArray(draft.symptoms)
+
         return {
           case_id: caseId,
           question: key,
@@ -370,8 +374,8 @@ export default function FormContent() {
           note: (draft.note ?? '').toString(),
           is_refer_case: !!draft.is_refer_case,
           type: 'form',
-          routed_by: routedBy,
-          created_at: createdAt,
+          created_at: createdAt,             
+          ...(createdById ? { created_by: createdById } : {}), 
         }
       })
 
@@ -402,8 +406,9 @@ export default function FormContent() {
         hmain_name: s(manualData.hmain_name) || 'ไม่มีการบันทึกสิทธิการรักษา',
         summary_clinics: summaryClinics,
         symptoms: summarySymptoms.length ? summarySymptoms : ['ไม่มีอาการ'],
-        question_results: resultsToSave,
-        created_at: createdAt,
+        question_results: resultsToSave,        // ⬅️ ตรงกับ type ที่ประกาศไว้ใน FormPPKPayload
+        created_at: createdAt,                  // ถ้า FormPPKPayload require
+        ...(createdById ? { created_by: createdById } : {}),
       }
 
       await authAxios.post('/form-ppk', payload)
@@ -413,7 +418,7 @@ export default function FormContent() {
         gender: manualData.gender || 'ไม่ระบุ',
         maininscl_name: payload.maininscl_name,
         printedAt: new Date().toISOString(),
-        routedBy: me?.name || 'ไม่ระบุ',
+        routedBy: createdByName,
         diseases: [...new Set(resultsToSave.map(r => r.question_title))],
         topics: resultsToSave.map(r => ({ code: r.question_code, title: r.question_title, note: r.note || '-' })),
         referredClinics: [...new Set(resultsToSave.flatMap(r => r.clinic))],

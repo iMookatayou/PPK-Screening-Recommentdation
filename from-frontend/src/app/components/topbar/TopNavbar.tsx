@@ -80,8 +80,8 @@ export default function TopNavBar() {
 
   const displayName = useMemo(() => {
     if (!user) return ''
-    const fromFL = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
-    return (user.name && user.name.trim()) || fromFL || user.email || 'ไม่พบชื่อ'
+    const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
+    return user.username || fullName || user.email || 'ไม่พบชื่อ'
   }, [user])
 
   const avatarSrc = user?.avatar || '/ico/useravatar.ico'
