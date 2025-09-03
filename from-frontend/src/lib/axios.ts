@@ -1,3 +1,4 @@
+// src/lib/axios.ts
 'use client';
 
 import axios, {
@@ -7,24 +8,28 @@ import axios, {
   InternalAxiosRequestConfig,
 } from 'axios';
 
-/* ---------------- Base URL: ใช้ ENV เท่านั้น และลงท้าย /api เสมอ ---------------- */
+/* -------------------------------------------------------------------------- */
+/*                             Base URL & Constants                           */
+/* -------------------------------------------------------------------------- */
+
+/** ใช้ ENV เท่านั้น และ "ต้องลงท้าย /api เสมอ" */
 function resolveApiBaseURL(): string {
   const raw = (process.env.NEXT_PUBLIC_API_BASE_URL || '').trim();
-
-  // ❌ ไม่ fallback ไป /api อีกแล้ว
   if (!raw) {
-    // โยน error ทันทีเพื่อให้รู้ว่า env ไม่ถูกฝังตอน build
     throw new Error('NEXT_PUBLIC_API_BASE_URL is not defined in environment (.env of frontend).');
   }
-
-  // ตัดสแลชท้าย และตัด /api หนึ่งชั้นออกก่อน แล้วค่อยเติมกลับทีหลัง (กันซ้ำ)
+  // กันเคสผู้ใช้ใส่ /api ซ้ำ
   const root = raw.replace(/\/+$/, '').replace(/\/api$/i, '');
   return `${root}/api`;
 }
 
-const baseURL = resolveApiBaseURL();
+const baseURL = resolveApiBaseURL();            // e.g. http://10.10.54.185:4002/api
+const rootURL = baseURL.replace(/\/api$/i, ''); // e.g. http://10.10.54.185:4002
 
-/* --------------- Helpers --------------- */
+/* -------------------------------------------------------------------------- */
+/*                                   Helpers                                  */
+/* -------------------------------------------------------------------------- */
+
 function ensureAxiosHeaders(config: InternalAxiosRequestConfig): AxiosHeaders {
   const h = config.headers;
   if (!h) {
@@ -40,6 +45,7 @@ function ensureAxiosHeaders(config: InternalAxiosRequestConfig): AxiosHeaders {
 
 function setJsonHeaders(config: InternalAxiosRequestConfig) {
   const headers = ensureAxiosHeaders(config);
+
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
 
   const method = (config.method || 'get').toLowerCase();
@@ -51,9 +57,14 @@ function setJsonHeaders(config: InternalAxiosRequestConfig) {
   if (!headers.has('Content-Type') && !isForm && !safeNoBody) {
     headers.set('Content-Type', 'application/json');
   }
+
+  // สำคัญกับบาง proxy / CSRF policy
+  if (!headers.has('X-Requested-With')) {
+    headers.set('X-Requested-With', 'XMLHttpRequest');
+  }
 }
 
-/** DB not ready helper */
+/** Error helper: DB ยังไม่พร้อม */
 export function isDbNotReady(err: unknown): boolean {
   const e = err as any;
   return (
@@ -64,7 +75,7 @@ export function isDbNotReady(err: unknown): boolean {
   );
 }
 
-/** Normalize axios error message */
+/** ปรับข้อความ error จาก axios ให้เป็นมิตรขึ้น */
 function normalizeAxiosError(error: AxiosError) {
   const server = (error.response?.data ?? {}) as any;
   const serverMsg = server?.message;
@@ -82,7 +93,7 @@ function normalizeAxiosError(error: AxiosError) {
   return error;
 }
 
-/** Add ?no_cache=1 */
+/** เพิ่ม no_cache=1 ให้ URL */
 export function withNoCache(url: string): string {
   try {
     const u = new URL(url, 'http://x/');
@@ -95,7 +106,7 @@ export function withNoCache(url: string): string {
   }
 }
 
-/* ===== Utilities: ทำ path ให้เป็น “API-relative” เสมอ ===== */
+/** ทำ path ให้เป็น relative ต่อ /api เสมอ */
 function toApiRelativePath(url: string | undefined): string | undefined {
   if (!url) return url;
   let path: string;
@@ -105,21 +116,39 @@ function toApiRelativePath(url: string | undefined): string | undefined {
   } catch {
     path = url.startsWith('/') ? url : `/${url}`;
   }
-  // baseURL ลงท้าย /api อยู่แล้ว → ลอก /api ออกถ้าเผลอใส่มา
+  // baseURL ลงท้าย /api แล้ว → ลอก /api ออกถ้าเผลอใส่มา
   path = path.replace(/^\/api(\/|$)/i, '/');
   return path;
 }
 
-/* -------- Public instance -------- */
+/** อ่านค่า cookie ฝั่ง browser */
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(
+    new RegExp('(?:^|; )' + name.replace(/([.$?*|{}()[\]\\/+^])/g, '\\$1') + '=([^;]*)')
+  );
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                                Axios Instance                              */
+/* -------------------------------------------------------------------------- */
+
 export const api: AxiosInstance = axios.create({
-  baseURL, // จบที่ ...:4002/api เสมอ (มาจาก ENV เท่านั้น)
+  baseURL,
   timeout: 15000,
+  withCredentials: true,                 // ส่ง/รับคุกกี้
+  xsrfCookieName: 'XSRF-TOKEN',          // Laravel Sanctum default
+  xsrfHeaderName: 'X-XSRF-TOKEN',        // Laravel Sanctum default
+  headers: { 'X-Requested-With': 'XMLHttpRequest' },
 });
 
+/* ---- Interceptors ---- */
 api.interceptors.request.use(
   (config) => {
     setJsonHeaders(config);
-    if (typeof config.url === 'string') {
+    // อนุญาตให้ข้ามการปรับ URL ถ้าตั้ง __absolute__ ไว้
+    if (typeof config.url === 'string' && !(config as any).__absolute__) {
       config.url = toApiRelativePath(config.url);
     }
     return config;
@@ -127,92 +156,29 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
+/**
+ * Auto-refresh CSRF: ถ้าเจอ 419 ในคำขอที่ไม่ใช่ GET และยังไม่เคย retry
+ * จะเรียก ensureCsrfCookie() แล้วลองยิงซ้ำ 1 ครั้ง
+ */
 api.interceptors.response.use(
   (res) => res,
-  (error: AxiosError) => {
-    if (isDbNotReady(error)) {
-      (error as any).userMessage = 'ระบบยังไม่พร้อมใช้งาน (ฐานข้อมูลยังไม่ถูกตั้งค่า)';
-    }
-    return Promise.reject(normalizeAxiosError(error));
-  }
-);
+  async (error: AxiosError) => {
+    const cfg = error.config as (InternalAxiosRequestConfig & { __retried?: boolean }) | undefined;
 
-/* ====== Auth utils (เก็บ token) ====== */
-const TOKEN_KEYS = ['auth_token', 'token'];
-
-export function getToken(): string | null {
-  if (typeof window === 'undefined') return null;
-  for (const k of TOKEN_KEYS) {
-    const v = localStorage.getItem(k);
-    if (v) return v;
-  }
-  return null;
-}
-
-export function persistToken(token: string) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem('auth_token', token);
-}
-
-export function dropToken() {
-  if (typeof window === 'undefined') return;
-  for (const k of TOKEN_KEYS) localStorage.removeItem(k);
-}
-
-/* -------- Protected instance (Bearer) -------- */
-export const authAxios: AxiosInstance = axios.create({
-  baseURL, // ...:4002/api
-  timeout: 15000,
-});
-
-const EXCEPT_AUTH_PATHS = ['/up', '/health', '/login-token'];
-
-authAxios.interceptors.request.use(
-  (config) => {
-    setJsonHeaders(config);
-
-    if (typeof config.url === 'string') {
-      const p = toApiRelativePath(config.url) || '/';
-      config.url = p;
-
-      const needsAuth = !EXCEPT_AUTH_PATHS.some((x) => p.startsWith(x));
-      (config as any).__shouldAuth = needsAuth;
-
-      if (needsAuth && typeof window !== 'undefined') {
-        const token = getToken();
-        if (token) {
-          ensureAxiosHeaders(config).set('Authorization', `Bearer ${token}`);
-          (config as any).__hadAuth = true;
-        } else {
-          (config as any).__hadAuth = false;
-        }
+    if (
+      error.response?.status === 419 &&
+      cfg &&
+      (cfg.method || 'get').toLowerCase() !== 'get' &&
+      !cfg.__retried
+    ) {
+      try {
+        await ensureCsrfCookie();
+        cfg.__retried = true;
+        return api.request(cfg);
+      } catch (_) {
+        /* ปล่อยไปให้ normalize ด้านล่าง */
       }
     }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-/** กันเคลียร์ token มั่ว ๆ */
-let loggingOut = false;
-
-authAxios.interceptors.response.use(
-  (res) => res,
-  (error: AxiosError) => {
-    const status = error.response?.status;
-    const cfg = error.config as any;
-    const shouldLogout =
-      (status === 401 || status === 419) &&
-      cfg?.__shouldAuth === true &&
-      cfg?.__hadAuth === true;
-
-    if (shouldLogout && !loggingOut && typeof window !== 'undefined') {
-      loggingOut = true;
-      try {
-        localStorage.setItem('auth_event', JSON.stringify({ type: 'LOGOUT', at: Date.now() }));
-      } catch {}
-      setTimeout(() => { loggingOut = false; }, 1000);
-    }
 
     if (isDbNotReady(error)) {
       (error as any).userMessage = 'ระบบยังไม่พร้อมใช้งาน (ฐานข้อมูลยังไม่ถูกตั้งค่า)';
@@ -221,23 +187,83 @@ authAxios.interceptors.response.use(
   }
 );
 
-/* ---- Helper สำหรับ AuthContext ---- */
-export function setAuthHeader(token?: string | null) {
-  if (typeof token === 'string' && token.length > 0) {
-    authAxios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    try { persistToken(token); } catch {}
+/* -------------------------------------------------------------------------- */
+/*                          Root Request Helper (non-/api)                    */
+/* -------------------------------------------------------------------------- */
+
+/** ยิงคำขวัญไป ROOT (เช่น /login, /logout) โดยไม่ให้ interceptor แปลง URL */
+function requestRoot<T = any>(
+  method: 'get' | 'post' | 'put' | 'delete',
+  path: string,
+  data?: any
+) {
+  return api.request<T>({
+    method,
+    url: `${rootURL}${path}`,
+    data,
+    withCredentials: true,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    // @ts-expect-error: custom flag to skip toApiRelativePath
+    __absolute__: true,
+  });
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               Sanctum Helpers                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * 1) เรียก CSRF ที่ ROOT (ไม่ใช่ /api)
+ * 2) อ่านคุกกี้ XSRF-TOKEN เอง แล้ว "ยัด" เป็น header default ให้ instance
+ */
+export async function ensureCsrfCookie() {
+  await axios.get(`${rootURL}/sanctum/csrf-cookie`, {
+    withCredentials: true,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+    params: { t: Date.now() }, // กัน cache
+  });
+
+  const token = getCookie('XSRF-TOKEN');
+  if (token) {
+    api.defaults.headers.common['X-XSRF-TOKEN'] = token;
   }
 }
 
-export function clearAuthHeader() {
-  delete authAxios.defaults.headers.common['Authorization'];
-  try { dropToken(); } catch {}
+/** ล็อกอินด้วย CID/Password (Cookie Session) → ยิงที่ ROOT (/login) */
+export async function loginWithCidPassword(cid: string, password: string) {
+  await ensureCsrfCookie();
+  const res = await requestRoot('post', '/login', { cid, password });
+  return res.data;
 }
 
-/* ---- ตั้งค่าเริ่มต้นจาก localStorage ---- */
-try {
-  if (typeof window !== 'undefined') {
-    const t = getToken();
-    if (t) setAuthHeader(t);
-  }
-} catch {}
+/** ออกจากระบบ (Cookie Session) → ยิงที่ ROOT (/logout) */
+export async function logoutSession() {
+  await ensureCsrfCookie();
+  const res = await requestRoot('post', '/logout');
+  return res.data;
+}
+
+/** ดึงข้อมูลผู้ใช้ปัจจุบัน (session-based) → /api/me */
+export async function fetchMe() {
+  const res = await api.get('/me');
+  return res.data;
+}
+
+/** อัปเดตข้อมูลผู้ใช้ (ต้องมี CSRF) → /api/user */
+export async function updateMe(payload: any) {
+  await ensureCsrfCookie();
+  const res = await api.put('/user', payload);
+  return res.data;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                          Backward-compat / Named Exports                   */
+/* -------------------------------------------------------------------------- */
+
+export const authAxios: AxiosInstance = api;
+
+export function getToken(): string | null { return null; }
+export function persistToken(_token: string) {}
+export function dropToken() {}
+export function setAuthHeader(_token?: string | null) {}
+export function clearAuthHeader() {}

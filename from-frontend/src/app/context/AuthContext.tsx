@@ -10,16 +10,25 @@ import React, {
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
-import { authAxios, setAuthHeader } from '@/lib/axios'
 import AnimatedLogo from '@/app/animatorlogo/AnimatedLogo'
 import LoadingDots from '@/app/components/ui/LoadingDots'
+
+// ใช้ Sanctum (cookie-based)
+import {
+  api,              // axios instance with withCredentials=true
+  fetchMe,          // GET /api/me
+  ensureCsrfCookie, // GET /sanctum/csrf-cookie
+  logoutSession,    // POST /logout
+} from '@/lib/axios'
 
 interface AuthContextType {
   user: any
   loading: boolean
   isAuthenticated: boolean
   token: string | null
-  login: (token: string, user: any, expiresAt?: string) => void
+  // NOTE: เก็บ signature เดิมไว้เพื่อไม่ให้โค้ดส่วนอื่นพัง
+  // ในโหมด Sanctum จะ "ไม่ใช้" token / expiresAt
+  login: (token: string | null, user: any, expiresAt?: string | null) => void
   logout: () => void
   refreshUser: () => Promise<void>
 }
@@ -34,52 +43,40 @@ const AuthContext = createContext<AuthContextType>({
   refreshUser: async () => {},
 })
 
+// เส้นทางที่ไม่ต้องล็อกอิน
 const publicPaths = new Set<string>(['/login', '/register', '/unauthorized'])
-const STORAGE_TOKEN_KEY = 'token'
-const STORAGE_USER_KEY = 'user'
-const STORAGE_EXP_KEY = 'token_expires_at'
 const DEFAULT_AFTER_LOGIN = '/erdsppk'
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
-  const [token, setToken] = useState<string | null>(null)
+  // โหมด Sanctum จะไม่มี token ให้เก็บ
+  const [token] = useState<string | null>(null)
 
-  // กัน window/document ตอน SSR
-  const [mounted, setMounted] = useState(false)
+  const [mounted, setMounted] = useState(false) // กัน SSR
 
   const router = useRouter()
   const pathname = usePathname()
   const isPublic = publicPaths.has(pathname)
 
-  const logoutTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const initializedRef = useRef(false)
 
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  const clearLogoutTimer = () => {
-    if (logoutTimerRef.current) {
-      clearTimeout(logoutTimerRef.current)
-      logoutTimerRef.current = null
-    }
-  }
-
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
     try {
-      localStorage.removeItem(STORAGE_TOKEN_KEY)
-      localStorage.removeItem(STORAGE_USER_KEY)
-      localStorage.removeItem(STORAGE_EXP_KEY)
-    } catch {}
+      // เรียก logout ฝั่งเซิร์ฟเวอร์ (idempotent)
+      await ensureCsrfCookie().catch(() => {})
+      await logoutSession().catch(() => {})
+    } catch {
+      // เงียบ ๆ ได้
+    }
 
     setUser(null)
-    setToken(null)
-    setAuthHeader(undefined)
-    setLoading(false)
-    clearLogoutTimer()
-
     try {
+      // sync ข้ามแท็บ
       localStorage.setItem('auth_event', JSON.stringify({ type: 'LOGOUT', at: Date.now() }))
     } catch {}
 
@@ -88,32 +85,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [isPublic, router])
 
-  const scheduleAutoLogout = useCallback(
-    (expiresAt?: string | null) => {
-      clearLogoutTimer()
-      if (!expiresAt) return
-      const expMs = new Date(expiresAt).getTime()
-      const delta = expMs - Date.now()
-      if (Number.isNaN(expMs) || delta <= 0) return
-      logoutTimerRef.current = setTimeout(() => logout(), delta)
-    },
-    [logout]
-  )
-
+  // login(): คง signature เดิมไว้ แต่ใน Sanctum จะ “สนใจเฉพาะ user”
   const login = useCallback(
-    (rawToken: string, userObj: any, expiresAt?: string) => {
-      try {
-        localStorage.setItem(STORAGE_TOKEN_KEY, rawToken)
-        localStorage.setItem(STORAGE_USER_KEY, JSON.stringify(userObj))
-        if (expiresAt) localStorage.setItem(STORAGE_EXP_KEY, expiresAt)
-      } catch {}
-
-      setToken(rawToken)
+    (_token: string | null, userObj: any, _expiresAt?: string | null) => {
       setUser(userObj)
-      setAuthHeader(rawToken)
-      scheduleAutoLogout(expiresAt)
 
       try {
+        // sync ข้ามแท็บ
         localStorage.setItem('auth_event', JSON.stringify({ type: 'LOGIN', at: Date.now() }))
       } catch {}
 
@@ -121,49 +99,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         router.replace(DEFAULT_AFTER_LOGIN)
       }
     },
-    [isPublic, router, scheduleAutoLogout]
+    [isPublic, router]
   )
 
   const refreshUser = useCallback(async () => {
     setLoading(true)
-    const tokenFromStorage = localStorage.getItem(STORAGE_TOKEN_KEY)
-    if (!tokenFromStorage) {
-      setAuthHeader(undefined)
-      setLoading(false)
-      return
-    }
-
     try {
-      setAuthHeader(tokenFromStorage)
-      const res = await authAxios.get('/me')
-      setUser(res.data)
-      setToken(tokenFromStorage)
-      scheduleAutoLogout(localStorage.getItem(STORAGE_EXP_KEY) || undefined)
+      const me = await fetchMe()
+      setUser(me)
     } catch {
-      logout()
+      // 401/419 → ถือว่าไม่ได้ล็อกอิน
+      setUser(null)
+      if (!publicPaths.has(window.location.pathname)) {
+        router.replace('/login')
+      }
     } finally {
       setLoading(false)
     }
-  }, [logout, scheduleAutoLogout])
+  }, [router])
 
+  // init ครั้งแรก: พยายามดึง me จาก session cookie
   useEffect(() => {
     if (initializedRef.current) return
     initializedRef.current = true
 
-    const tokenFromStorage = localStorage.getItem(STORAGE_TOKEN_KEY)
-    const exp = localStorage.getItem(STORAGE_EXP_KEY)
+    ;(async () => {
+      setLoading(true)
+      try {
+        // ไม่จำเป็นต้องเรียก csrf ในการ GET /me
+        await refreshUser()
+      } finally {
+        setLoading(false)
+      }
+    })()
+  }, [refreshUser])
 
-    if (!tokenFromStorage) {
-      setAuthHeader(undefined)
-      setLoading(false)
-      return
-    }
-
-    setAuthHeader(tokenFromStorage)
-    refreshUser()
-    scheduleAutoLogout(exp)
-  }, [refreshUser, scheduleAutoLogout])
-
+  // เปลี่ยนหน้า: ถ้าไม่ได้ล็อกอินและหน้าไม่ public → เด้งไป /login
+  // ถ้าล็อกอินแล้วแต่ไปหน้า public → เด้งไปหน้าในระบบ
   useEffect(() => {
     if (loading || !mounted) return
 
@@ -175,6 +147,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [user, loading, isPublic, mounted, router])
 
+  // ซิงก์สถานะข้ามแท็บ
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key !== 'auth_event' || !e.newValue) return
@@ -182,9 +155,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const payload = JSON.parse(e.newValue)
         if (payload.type === 'LOGOUT') {
           setUser(null)
-          setToken(null)
-          setAuthHeader(undefined)
-          clearLogoutTimer()
           if (!publicPaths.has(window.location.pathname)) {
             router.replace('/login')
           }
@@ -198,7 +168,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('storage', onStorage)
   }, [refreshUser, router])
 
-  // เงื่อนไขการแสดง overlay (logical เท่านั้น)
+  // เงื่อนไขการแสดง overlay
   const showOverlay =
     loading ||
     (!user && !isPublic) ||
@@ -210,8 +180,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         user,
         loading,
         isAuthenticated: !!user,
-        token,
-        login,
+        token,       // จะเป็น null เสมอในโหมด Sanctum
+        login,       // ใช้แค่อาร์กิวเมนต์ตัวที่ 2 (user)
         logout,
         refreshUser,
       }}
@@ -238,7 +208,6 @@ function FullPageOverlay({ open }: { open: boolean }) {
 
   return createPortal(
     <div
-      // ไม่มี suppressHydrationWarning ก็ได้ เพราะไม่ SSR เลย
       style={{
         position: 'fixed',
         inset: 0,
@@ -248,20 +217,19 @@ function FullPageOverlay({ open }: { open: boolean }) {
         alignItems: 'center',
         justifyContent: 'center',
         zIndex: 9999,
-        gap: 12, // เว้นช่องโลโก้กับจุดๆ
+        gap: 12,
       }}
     >
       <AnimatedLogo />
 
-      {/* Container ของแถวจุด: สูงคงที่เสมอ ป้องกัน layout shift */}
       <div
         style={{
-          height: 28,            // ปรับตามความสูงจริงของ LoadingDots (เช่น 24–32)
+          height: 28,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          visibility: 'visible', // ถ้าวันไหนอยากซ่อน ให้สลับ visible/hidden
-          opacity: 1,            // ถ้าจะเฟด: 0 -> 1
+          visibility: 'visible',
+          opacity: 1,
           transition: 'opacity 200ms ease',
         }}
       >
