@@ -62,7 +62,7 @@ export type PatientData = {
 
 // ---------- Result model (generic) ----------
 export type GlobalQuestionResult = {
-  clinic: string[]             // รหัสแผนกที่ route ไป (เช่น 'med', 'er' ฯลฯ)
+  clinic: string[];            // รหัสแผนกที่ route ไป (เช่น 'med', 'er' ฯลฯ)
   note?: string;
   routedBy: 'auto' | 'manual';
   caseType?: string;
@@ -72,7 +72,7 @@ export type GlobalQuestionResult = {
 
 // ---------- FormPPK: โครงสร้างผลลัพธ์ที่ "คอมโพเนนต์คำถาม" ส่งกลับมา (Draft) ----------
 export type FormDraft = {
-  clinic: string[]       // ← แก้ให้รองรับทั้งเดี่ยวและ array
+  clinic: string[];      // รองรับหลายห้อง
   symptoms?: string[] | string;
   note?: string;
   is_refer_case?: boolean;
@@ -80,23 +80,23 @@ export type FormDraft = {
 
 // ---------- FormPPK: โครงสร้างผลลัพธ์ที่ "บันทึกจริง" (พร้อม metadata) ----------
 export type QuestionResult = {
-  case_id: string
-  question_key: string
-  clinic: string[]
-  is_refer_case: boolean
-  note: string
-  symptoms: string[]
-  created_by?: number 
-  created_at: string
-  type: string
-}
+  case_id: string;
+  question_key: string;
+  clinic: string[];
+  is_refer_case: boolean;
+  note: string;
+  symptoms: string[];
+  created_by?: number;
+  created_at: string;
+  type: string;
+};
 
 // ---------- พร้อมข้อมูลแสดงผล (title, code, etc.) ----------
 export type QuestionResultWithMeta = QuestionResult & {
   question: string;
   question_code: number;
   question_title: string;
-  type: string 
+  type: string;
   isReferCase?: boolean;
 };
 
@@ -112,10 +112,10 @@ export type FormPPKPayload = {
   created_at: string;   // 'YYYY-MM-DD HH:mm:ss'
   issueDate?: string;   // 'YYYY-MM-DD'
   expiryDate?: string;  // 'YYYY-MM-DD'
-  summary_clinics: string[];   
+  summary_clinics: string[];
   symptoms: string[];
   question_results: QuestionResultWithMeta[];
-  created_by?: number 
+  created_by?: number;
 };
 
 // สำหรับหน้า Guidance (ไม่เก็บผู้ป่วยจริง)
@@ -137,3 +137,22 @@ export type ReferralGuidancePayload = {
   summary_clinics: string[];
   summary_symptoms: string[];
 };
+
+// ---------- Auth / User ----------
+export type ApiUserRole = 'admin' | 'user' | string;
+
+export interface ApiUser {
+  id: number;
+  email: string;
+
+  role: ApiUserRole;
+
+  first_name?: string | null;
+  last_name?: string | null;
+  avatar?: string | null;
+
+  username?: string | null;
+
+  // กัน TS ตกกรณี backend มีฟิลด์เกินมา
+  [key: string]: unknown;
+}

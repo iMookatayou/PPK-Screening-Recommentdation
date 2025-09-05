@@ -1,20 +1,23 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { Suspense, useEffect, useMemo, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import styles from './styles/PrintSummary.module.css'
 import { ArrowLeft, Printer } from 'lucide-react'
 import Image from 'next/image'
 
+// (เลือกใช้ได้: กัน Next พยายาม prerender หน้านี้ระหว่าง build)
+// export const dynamic = 'force-dynamic'
+
 type Topic = { code: string; title: string; note: string }
 
 type PrintSummaryData = {
   patientName: string
-  printedAt?: string | number | Date   // เวลา generate/สั่งพิมพ์
-  routedBy: string                     // ผู้ส่งต่อ/ผู้คัดกรอง
-  rightsNote: string                   // สิทธิการรักษา
-  diseases?: string[]                  // โรคที่เกี่ยวข้อง (ถ้ามี)
-  topics: Topic[]                      // รายการคำถาม/โรค + note
+  printedAt?: string | number | Date
+  routedBy: string
+  rightsNote: string
+  diseases?: string[]
+  topics: Topic[]
   referredClinics?: Array<string | { label?: string; name?: string; text?: string }>
 }
 
@@ -28,7 +31,6 @@ const DEFAULT_DATA: PrintSummaryData = {
   referredClinics: [],
 }
 
-// map โค้ด → ป้ายชื่อห้องตรวจ
 const clinicLabelMap: Record<string, string> = {
   surg: 'OPD ศัลย์',
   ortho: 'OPD Ortho',
@@ -49,7 +51,6 @@ const clinicLabelMap: Record<string, string> = {
   ped: 'OPD กุมารเวชกรรม',
 }
 
-// ดึง label และแปลงด้วย clinicLabelMap
 function extractClinicLabels(
   items?: Array<string | { label?: string; name?: string; text?: string }>
 ): string[] {
@@ -87,12 +88,20 @@ function safeParseDate(v: PrintSummaryData['printedAt']): Date {
   }
 }
 
+/** ====== หน้า page ต้องห่อด้วย <Suspense> เมื่อใช้ useSearchParams ====== */
 export default function PrintSummaryPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 16 }}>กำลังโหลดสรุปการพิมพ์…</div>}>
+      <PrintSummaryInner />
+    </Suspense>
+  )
+}
+
+function PrintSummaryInner() {
   const router = useRouter()
   const search = useSearchParams()
   const [data, setData] = useState<PrintSummaryData>(DEFAULT_DATA)
 
-  // โหลดจาก localStorage (ฝั่ง client)
   useEffect(() => {
     try {
       const raw = localStorage.getItem('printSummary')
@@ -120,13 +129,11 @@ export default function PrintSummaryPage() {
     const auto = search.get('autoPrint')
     if (!auto) return
     if (data.topics && data.topics.length >= 0) {
-      // เว้น 300ms ให้ฟอนต์/ภาพ/DOM เสถียรก่อน
       const t = setTimeout(() => window.print(), 300)
       return () => clearTimeout(t)
     }
   }, [search, data.topics])
 
-  // แสดงผล
   const rightsDisplay =
     data.rightsNote && data.rightsNote.trim() ? data.rightsNote : 'ไม่มีการบันทึกสิทธิการรักษา'
   const clinicList = useMemo(() => extractClinicLabels(data.referredClinics), [data.referredClinics])
@@ -134,7 +141,9 @@ export default function PrintSummaryPage() {
 
   const handlePrint = () => window.print()
   const handleGoBack = () => {
-    try { localStorage.removeItem('printSummary') } catch {}
+    try {
+      localStorage.removeItem('printSummary')
+    } catch {}
     router.push('/formppk')
   }
 

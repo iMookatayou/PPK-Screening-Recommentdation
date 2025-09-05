@@ -3,7 +3,7 @@
 import { useAuth } from '@/app/context/AuthContext'
 import styles from './TopNavbar.module.css'
 import { LogOut, Menu, ShieldCheck } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { authAxios } from '@/lib/axios'
 
@@ -12,9 +12,8 @@ export default function TopNavBar() {
   const [showMenu, setShowMenu] = useState(false)
   const router = useRouter()
 
-  // ------ NEW: pending badge ------
+  // ------ Pending badge (เฉพาะ admin) ------
   const [pending, setPending] = useState<number>(0)
-  const timerRef = useRef<NodeJS.Timeout | null>(null)
 
   const fetchPending = async () => {
     try {
@@ -22,7 +21,7 @@ export default function TopNavBar() {
       const res = await authAxios.get('/admin/users', {
         params: { status: 'pending', per_page: 1, page: 1 },
       })
-      const total = res?.data?.meta?.total ?? 0
+      const total = (res?.data?.meta?.total ?? 0) as number
       setPending(total)
     } catch {
       // เงียบไว้ไม่รบกวนผู้ใช้
@@ -30,63 +29,71 @@ export default function TopNavBar() {
   }
 
   useEffect(() => {
-    if (!user || user.role !== 'admin') return;
+    if (!user || user.role !== 'admin') return
 
-    let intervalId: number | null = null;
-    let inFlight = false;
+    let intervalId: number | null = null
+    let inFlight = false
+
     const fetchSafe = async () => {
-      if (inFlight) return;
-      inFlight = true;
-      try { await fetchPending(); } finally { inFlight = false; }
-    };
+      if (inFlight) return
+      inFlight = true
+      try {
+        await fetchPending()
+      } finally {
+        inFlight = false
+      }
+    }
 
     const start = () => {
-      // เรียกครั้งแรกทันที
-      fetchSafe();
-      // เริ่ม interval เฉพาะตอนมองเห็นแท็บ
-      intervalId = window.setInterval(fetchSafe, 60_000);
-    };
+      // ครั้งแรก
+      fetchSafe()
+      // อัปเดตทุก 60 วิ เฉพาะตอนแท็บมองเห็น
+      intervalId = window.setInterval(fetchSafe, 60_000)
+    }
 
     const stop = () => {
       if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
+        clearInterval(intervalId)
+        intervalId = null
       }
-    };
+    }
 
     const onVisibility = () => {
-      if (document.visibilityState === 'visible') {
-        start();
-      } else {
-        stop();
-      }
-    };
+      if (document.visibilityState === 'visible') start()
+      else stop()
+    }
 
-    // initial
-    if (document.visibilityState === 'visible') start();
+    if (document.visibilityState === 'visible') start()
 
-    document.addEventListener('visibilitychange', onVisibility);
-    const refreshHandler = () => fetchSafe();
-    window.addEventListener('admin-pending-refresh', refreshHandler as EventListener);
+    document.addEventListener('visibilitychange', onVisibility)
+    const refreshHandler = () => fetchSafe()
+    window.addEventListener('admin-pending-refresh', refreshHandler as EventListener)
 
     return () => {
-      stop();
-      document.removeEventListener('visibilitychange', onVisibility);
-      window.removeEventListener('admin-pending-refresh', refreshHandler as EventListener);
-    };
-  }, [user]);
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+      window.removeEventListener('admin-pending-refresh', refreshHandler as EventListener)
+    }
+  }, [user])
 
-  // ------ /NEW ------
-
+  // ------ Display name / Avatar ------
   const displayName = useMemo(() => {
     if (!user) return ''
     const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ').trim()
-    return user.username || fullName || user.email || 'ไม่พบชื่อ'
+    const uname =
+      typeof user === 'object' && user !== null && 'username' in user
+        ? (user as { username?: string | null }).username ?? undefined
+        : undefined
+    return (uname && String(uname).trim()) || fullName || user.email || 'ไม่พบชื่อ'
   }, [user])
 
-  const avatarSrc = user?.avatar || '/ico/useravatar.ico'
+  // avatarSrc (แทนของเดิม)
+  const avatarSrc =
+    (user && typeof user === 'object' && 'avatar' in user
+      ? ((user as { avatar?: string | null }).avatar ?? undefined)
+      : undefined) || '/ico/useravatar.ico'
+
   const goToAdminPage = () => router.push('/admin/user')
-  // cap 99+
   const pendingText = pending > 99 ? '99+' : String(pending)
   const adminAria =
     !loading && user?.role === 'admin'
