@@ -13,6 +13,7 @@ import { motion } from "framer-motion";
 import { getTitle } from "@/app/components/utils/getTitle";
 import styles from "./styles/Dashboard.module.css";
 import LoadingSpinner from "@/app/components/ui/LoadingSpinner";
+import { api } from "@/lib/axios"; // ✅ ใช้ axios instance (withCredentials=true)
 
 /* ------------ types ------------ */
 type SummaryItem = {
@@ -78,48 +79,53 @@ function fmtDate(d: Date) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-/* ------------ fetch helpers ------------ */
-async function fetchJSON(path: string, headers: HeadersInit) {
-  const base = resolveApiBase();
-  const url = `${base}${path.startsWith("/") ? path : `/${path}`}`;
-  const res = await fetch(url, { headers });
-  if (!res.ok) throw new Error(`โหลดข้อมูลไม่สำเร็จ (${res.status})`);
-  const json = await res.json();
-  if (!Array.isArray(json?.data)) throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
-  return json.data as SummaryItem[];
+/* ------------ fetch helpers (ใช้ axios instance + session cookie) ------------ */
+async function getArrayData(url: string) {
+  const { data } = await api.get(url); // withCredentials already true
+  if (!Array.isArray((data as any)?.data)) throw new Error("รูปแบบข้อมูลไม่ถูกต้อง");
+  return (data as any).data as SummaryItem[];
 }
-async function fetchReferralQuiet(headers: HeadersInit, from?: string, to?: string) {
+
+async function fetchReferralQuiet(from?: string, to?: string) {
+  // legacy endpoint
   const legacyPath =
     from && to
-      ? `/api/referral-guidances/summary?from=${from}&to=${to}`
-      : `/api/referral-guidances/summary`;
-  const legacy = await fetchJSON(legacyPath, headers).catch(() => []);
-  if (legacy.length > 0) return legacy;
+      ? `/referral-guidances/summary?from=${from}&to=${to}`
+      : `/referral-guidances/summary`;
+  try {
+    const arr = await getArrayData(`/api${legacyPath.startsWith("/") ? legacyPath : `/${legacyPath}`}`);
+    if (arr.length > 0) return arr;
+  } catch { /* silent */ }
 
-  const base = resolveApiBase();
+  // unified summary
   const q = new URLSearchParams({ type: "guide" });
   if (from) q.set("from", from);
   if (to) q.set("to", to);
-  const r = await fetch(`${base}/api/summary?${q.toString()}`, { headers }).catch(() => null);
-  if (!r || !r.ok) return [];
-  const j = await r.json().catch(() => ({}));
-  return Array.isArray(j?.data) ? (j.data as SummaryItem[]) : [];
+  try {
+    const arr = await getArrayData(`/api/summary?${q.toString()}`);
+    return arr;
+  } catch { return []; }
 }
-async function fetchFormQuiet(headers: HeadersInit, from?: string, to?: string) {
-  const legacyPath =
-    from && to ? `/api/form-ppk/summary?from=${from}&to=${to}` : `/api/form-ppk/summary`;
-  const legacy = await fetchJSON(legacyPath, headers).catch(() => []);
-  if (legacy.length > 0) return legacy;
 
-  const base = resolveApiBase();
+async function fetchFormQuiet(from?: string, to?: string) {
+  // legacy endpoint
+  const legacyPath =
+    from && to ? `/form-ppk/summary?from=${from}&to=${to}` : `/form-ppk/summary`;
+  try {
+    const arr = await getArrayData(`/api${legacyPath.startsWith("/") ? legacyPath : `/${legacyPath}`}`);
+    if (arr.length > 0) return arr;
+  } catch { /* silent */ }
+
+  // unified summary
   const q = new URLSearchParams({ type: "form" });
   if (from) q.set("from", from);
   if (to) q.set("to", to);
-  const r = await fetch(`${base}/api/summary?${q.toString()}`, { headers }).catch(() => null);
-  if (!r || !r.ok) return [];
-  const j = await r.json().catch(() => ({}));
-  return Array.isArray(j?.data) ? (j.data as SummaryItem[]) : [];
+  try {
+    const arr = await getArrayData(`/api/summary?${q.toString()}`);
+    return arr;
+  } catch { return []; }
 }
+
 function toCountMap(rows: SummaryItem[]) {
   const m: Record<string, number> = {};
   for (const it of rows || []) {
@@ -283,12 +289,10 @@ export default function ReferralStatsDashboardPage() {
     setLoading(true);
     setError("");
     try {
-      const token = localStorage.getItem("token");
-      if (!token) throw new Error("Missing token");
-      const headers = { Authorization: `Bearer ${token}`, Accept: "application/json" };
+      // ✅ ไม่ต้องใช้ token แล้ว / ใช้ session cookie จาก Sanctum
       const [r, f] = await Promise.all([
-        fetchReferralQuiet(headers, effectiveFrom, effectiveTo),
-        fetchFormQuiet(headers, effectiveFrom, effectiveTo),
+        fetchReferralQuiet(effectiveFrom, effectiveTo),
+        fetchFormQuiet(effectiveFrom, effectiveTo),
       ]);
       setRefMap(toCountMap(r));
       setFormMap(toCountMap(f));

@@ -47,6 +47,8 @@ function setJsonHeaders(config: InternalAxiosRequestConfig) {
   const headers = ensureAxiosHeaders(config);
 
   if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+  // ถ้าต้องการภาษาหลักเป็นไทย เปิดบรรทัดล่างนี้:
+  // if (!headers.has('Accept-Language')) headers.set('Accept-Language', 'th-TH');
 
   const method = (config.method || 'get').toLowerCase();
   const safeNoBody =
@@ -93,12 +95,12 @@ function normalizeAxiosError(error: AxiosError) {
   return error;
 }
 
-/** เพิ่ม no_cache=1 ให้ URL */
+/** เพิ่ม no_cache=1 ให้ URL (กัน cache ระหว่างดีบัก) — แก้เคส '?' ซ้ำ */
 export function withNoCache(url: string): string {
   try {
     const u = new URL(url, 'http://x/');
     u.searchParams.set('no_cache', '1');
-    const query = u.search ? '?' + u.searchParams.toString() : '';
+    const query = u.search || ''; // <-- เดิมคำนวณใหม่ทำให้ '?' ซ้ำ
     const path = u.pathname + query;
     return path.charAt(0) === '/' ? path : '/' + path;
   } catch {
@@ -137,7 +139,7 @@ function getCookie(name: string): string | null {
 export const api: AxiosInstance = axios.create({
   baseURL,
   timeout: 15000,
-  withCredentials: true,                 // ส่ง/รับคุกกี้
+  withCredentials: true,                 // ส่ง/รับคุกกี้ (Sanctum SPA)
   xsrfCookieName: 'XSRF-TOKEN',          // Laravel Sanctum default
   xsrfHeaderName: 'X-XSRF-TOKEN',        // Laravel Sanctum default
   headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -157,26 +159,27 @@ api.interceptors.request.use(
 );
 
 /**
- * Auto-refresh CSRF: ถ้าเจอ 419 ในคำขอที่ไม่ใช่ GET และยังไม่เคย retry
- * จะเรียก ensureCsrfCookie() แล้วลองยิงซ้ำ 1 ครั้ง
+ * Auto-refresh CSRF:
+ * - ถ้าเจอ 419 ในคำขอที่ไม่ใช่ GET และยังไม่เคย retry → ensureCsrfCookie() แล้วลองยิงซ้ำ 1 ครั้ง
+ * - หมายเหตุ: เปิด 401 retry ได้ แต่ไม่ “จำเป็น” ถ้าคุณอยากให้ 401 เด้งไป login เลย
  */
 api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
-    const cfg = error.config as (InternalAxiosRequestConfig & { __retried?: boolean }) | undefined;
+    const cfg = error.config as (InternalAxiosRequestConfig & { __retried419?: boolean }) | undefined;
 
     if (
       error.response?.status === 419 &&
       cfg &&
       (cfg.method || 'get').toLowerCase() !== 'get' &&
-      !cfg.__retried
+      !cfg.__retried419
     ) {
       try {
         await ensureCsrfCookie();
-        cfg.__retried = true;
+        cfg.__retried419 = true;
         return api.request(cfg);
-      } catch (_) {
-        /* ปล่อยไปให้ normalize ด้านล่าง */
+      } catch {
+        // ปล่อยไป normalize ด้านล่าง
       }
     }
 
@@ -191,7 +194,7 @@ api.interceptors.response.use(
 /*                          Root Request Helper (non-/api)                    */
 /* -------------------------------------------------------------------------- */
 
-/** ยิงคำขวัญไป ROOT (เช่น /login, /logout) โดยไม่ให้ interceptor แปลง URL */
+/** ยิงคำขอไป ROOT (เช่น /login, /logout) โดยไม่ให้ interceptor แปลง URL */
 function requestRoot<T = any>(
   method: 'get' | 'post' | 'put' | 'delete',
   path: string,
@@ -229,17 +232,33 @@ export async function ensureCsrfCookie() {
   }
 }
 
-/** ล็อกอินด้วย CID/Password (Cookie Session) → ยิงที่ ROOT (/login) */
+/**
+ * เรียกตอนแอปบูต (กัน 419 ครั้งแรก)
+ * ใช้ใน layout/_app: useEffect(() => { bootstrapAuth(); }, []);
+ */
+export async function bootstrapAuth() {
+  try { await ensureCsrfCookie(); } catch { /* ignore */ }
+}
+
+/** ล็อกอินด้วย CID/Password (Cookie Session) → ยิงที่ ROOT
+ * - ถ้าแบ็กเอนด์คุณใช้ Fortify/Jetstream (session) ปกติ route คือ '/login'
+ * - ถ้าคุณทำ '/api/login' เองที่ออก session cookie → เปลี่ยน path ให้ตรงระบบคุณ
+ */
 export async function loginWithCidPassword(cid: string, password: string) {
   await ensureCsrfCookie();
-  const res = await requestRoot('post', '/login', { cid, password });
+  // Fortify/Jetstream: '/login'
+  // Custom API session login: '/api/login'
+  const res = await requestRoot('post', '/api/login', { cid, password });
   return res.data;
 }
 
-/** ออกจากระบบ (Cookie Session) → ยิงที่ ROOT (/logout) */
+/** ออกจากระบบ (Cookie Session) → ยิงที่ ROOT
+ * - Fortify/Jetstream มาตรฐาน: '/logout'
+ * - ถ้าใช้ '/api/logout' ในระบบคุณ ให้เปลี่ยน path ด้านล่าง
+ */
 export async function logoutSession() {
   await ensureCsrfCookie();
-  const res = await requestRoot('post', '/logout');
+  const res = await requestRoot('post', '/api/logout');
   return res.data;
 }
 
@@ -262,6 +281,7 @@ export async function updateMe(payload: any) {
 
 export const authAxios: AxiosInstance = api;
 
+// โหมด Cookie/Session (Sanctum SPA) จงใจ "ไม่ใช้" Bearer token
 export function getToken(): string | null { return null; }
 export function persistToken(_token: string) {}
 export function dropToken() {}

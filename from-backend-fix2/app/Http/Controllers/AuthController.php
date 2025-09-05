@@ -79,8 +79,6 @@ class AuthController extends Controller
     /** กฎอีเมลแบบหลวม: แค่มี @ และมีตัวอักษรก่อน-หลัง @ ก็พอ (ไม่ต้องมี .com) */
     protected function looseEmailRule(): string
     {
-        // ตัวอย่างที่ยอมรับ: user@example, a@b, u@wfh
-        // ไม่ยอมรับ: @domain, user@, มีช่องว่าง
         return 'regex:/^[^@\s]+@[^@\s]+$/';
     }
 
@@ -89,12 +87,28 @@ class AuthController extends Controller
     {
         if (!$u->reapply_allowed) return false;
 
-        // sentinel = ไม่มีวันหมดเขต
         $until = $u->reapply_until ? (string) $u->reapply_until : User::EPOCH_DATE;
         if (User::isEpochDate($until)) return true;
 
         $tz = config('app.timezone', 'Asia/Bangkok');
         return Carbon::now($tz)->startOfDay()->lte(Carbon::parse($until, $tz)->endOfDay());
+    }
+
+    /**
+     * ทำ payload ผู้ใช้แบบปลอดภัย (เลี่ยงการใช้ ->toArray())
+     * @return array{id:int,cid:string,first_name:string,last_name:string,email:string,role:string,status:string}
+     */
+    protected function userPayload(User $u): array
+    {
+        return [
+            'id'         => (int) $u->id,
+            'cid'        => (string) $u->cid,
+            'first_name' => (string) $u->first_name,
+            'last_name'  => (string) $u->last_name,
+            'email'      => (string) $u->email,
+            'role'       => (string) $u->role,
+            'status'     => (string) $u->status,
+        ];
     }
 
     /**
@@ -116,10 +130,10 @@ class AuthController extends Controller
         Log::info('[REGISTER] Incoming', [
             'rid'  => $rid,
             'meta' => $this->meta($request),
-            'input'=> $this->redact($request->except(['password','password_confirmation'])),
+            'input'=> $this->redact(Arr::except($request->all(), ['password','password_confirmation'])),
         ]);
 
-        // 1) Validate (ไม่ใส่ unique:cid เพื่อควบคุมข้อความเอง; email ต้อง required)
+        // 1) Validate
         $validator = Validator::make($request->all(), [
             'cid'        => ['required', 'digits:13', 'regex:/^\d{13}$/'],
             'first_name' => ['required', 'string', 'max:255'],
@@ -133,7 +147,6 @@ class AuthController extends Controller
             'first_name.required' => 'กรุณากรอกชื่อ',
             'last_name.required'  => 'กรุณากรอกนามสกุล',
             'email.required'      => 'กรุณากรอกอีเมล',
-            // เปลี่ยนข้อความเป็นรูปแบบที่เรายอมรับ
             'email.regex'         => 'กรุณากรอกอีเมลในรูปแบบ name@domain (ไม่ต้องมี .com ก็ได้)',
             'email.unique'        => 'อีเมลนี้ถูกใช้แล้ว',
             'password.required'   => 'กรุณากรอกรหัสผ่าน',
@@ -162,18 +175,18 @@ class AuthController extends Controller
                 'reapply_until'   => (string) $existing->reapply_until,
             ]);
 
-            // เคส re-apply: อนุญาตให้ “สมัครใหม่” ซ้ำบน record เดิม
+            // re-apply
             if ($existing->status === User::STATUS_REJECTED && $this->isReapplyWindowOpen($existing)) {
                 $existing->forceFill([
                     'first_name'      => $data['first_name'],
                     'last_name'       => $data['last_name'],
-                    'email'           => $data['email'],   // required
+                    'email'           => $data['email'],
                     'password'        => $data['password'], // mutator จะ hash ให้
                     'status'          => User::STATUS_PENDING,
-                    'approved_at'     => null,              // model จะ map เป็น sentinel
-                    'rejected_reason' => null,              // ''
+                    'approved_at'     => null,
+                    'rejected_reason' => null,
                     'reapply_allowed' => false,
-                    'reapply_until'   => null,              // '1970-01-01'
+                    'reapply_until'   => null,
                 ])->save();
 
                 Log::info('[REGISTER] Re-apply updated → pending', [
@@ -185,7 +198,7 @@ class AuthController extends Controller
                 return response()->json([
                     'code'    => 'REGISTERED_PENDING',
                     'message' => 'สมัครสำเร็จ ระบบจะตรวจสอบและอนุมัติ โปรดเข้าสู่ระบบภายหลัง',
-                    'user'    => $existing->only(['id','cid','first_name','last_name','email','role','status']),
+                    'user'    => $this->userPayload($existing),
                 ], 201);
             }
 
@@ -244,7 +257,7 @@ class AuthController extends Controller
                 'cid'        => $data['cid'],
                 'first_name' => $data['first_name'],
                 'last_name'  => $data['last_name'],
-                'email'      => $data['email'],      // required
+                'email'      => $data['email'],
                 'password'   => $data['password'],   // mutator hash
                 'role'       => User::ROLE_USER,
                 'status'     => User::STATUS_PENDING,
@@ -259,7 +272,7 @@ class AuthController extends Controller
             return response()->json([
                 'code'    => 'REGISTERED_PENDING',
                 'message' => 'สมัครสำเร็จ ระบบจะตรวจสอบและอนุมัติ โปรดเข้าสู่ระบบภายหลัง',
-                'user'    => Arr::only($user->toArray(), ['id','cid','first_name','last_name','email','role','status']),
+                'user'    => $this->userPayload($user),
             ], 201);
 
         } catch (QueryException $e) {
@@ -311,10 +324,11 @@ class AuthController extends Controller
         $rid = $this->requestId($request);
         $t0  = $this->t0();
 
+        // 🔧 Log input แบบ mask
         Log::info('[LOGIN] Incoming', [
             'rid'  => $rid,
             'meta' => $this->meta($request),
-            'input'=> $this->redact($request->only(['cid'])), // ไม่ log password
+            'input'=> $this->redact(Arr::only($request->all(), ['cid'])), // ไม่ log password
         ]);
 
         $validator = Validator::make($request->all(), [
@@ -412,8 +426,7 @@ class AuthController extends Controller
             }
 
             // ----- Sanctum Session Login (ไม่มี Bearer) -----
-            // ----- Sanctum Session Login (ไม่มี Bearer) -----
-            Auth::guard('web')->login($user, true); 
+            Auth::guard('web')->login($user, true);
             $request->session()->regenerate();
 
             Log::info('[LOGIN] User logged in (Sanctum session)', [
@@ -425,9 +438,8 @@ class AuthController extends Controller
 
             return response()->json([
                 'message' => 'เข้าสู่ระบบสำเร็จ',
-                'user'    => Arr::only($user->toArray(), ['id','cid','first_name','last_name','email','role','status']),
+                'user'    => $this->userPayload($user),
             ]);
-
 
         } catch (\Throwable $e) {
             Log::error('[LOGIN ERROR]', [
@@ -440,123 +452,117 @@ class AuthController extends Controller
     }
 
     /**
-     * GET /api/me
+     * GET /api/me  — robust diagnostics
      */
-    /**
- * GET /api/me  — robust diagnostics
- */
-public function me(Request $request)
-{
-    $rid = $this->requestId($request);
-    $t0  = $this->t0();
+    public function me(Request $request)
+    {
+        $rid = $this->requestId($request);
+        $t0  = $this->t0();
 
-    try {
-        // ==== เก็บข้อมูลวินิจฉัยแบบไม่หลุดข้อมูลอ่อนไหว ====
-        $sessionCookieName = (string) config('session.cookie', 'laravel_session');
-        $rawSessionCookie  = (string) $request->cookie($sessionCookieName, '');
-        $xsrfCookie        = (string) $request->cookie('XSRF-TOKEN', '');
-
-        $hasSessionCookie  = $rawSessionCookie !== '';
-        $hasXsrfCookie     = $xsrfCookie !== '';
-
-        // preview เพื่อ log แบบ mask (ไม่ log ค่าจริง)
-        $preview = function (?string $v, int $keepHead = 8): ?string {
-            if (!$v) return null;
-            $v = (string) $v;
-            if (strlen($v) <= $keepHead) return str_repeat('*', strlen($v));
-            return substr($v, 0, $keepHead) . '...';
-        };
-
-        // header ที่เกี่ยวข้อง (ไม่ log cookie ทั้งก้อน)
-        $hdr = [
-            'origin'   => (string) $request->headers->get('origin', ''),
-            'referer'  => (string) $request->headers->get('referer', ''),
-            'x_requested_with' => (string) $request->headers->get('x-requested-with', ''),
-            // X-XSRF-TOKEN header (จาก axios) — log แบบ mask
-            'x_xsrf_token_present' => $request->headers->has('x-xsrf-token'),
-            'x_xsrf_token_preview' => $preview($request->headers->get('x-xsrf-token')),
-        ];
-
-        // สถานะ session (กัน exception)
-        $hasSession = $request->hasSession();
-        $sessionStarted = null;
-        $sessionIdPreview = null;
         try {
-            if ($hasSession) {
-                $sessionStarted   = $request->session()->isStarted();
-                $sessionIdPreview = $preview($request->session()->getId());
-            }
-        } catch (\Throwable $se) {
-            $sessionStarted   = null;
+            // ==== เก็บข้อมูลวินิจฉัยแบบไม่หลุดข้อมูลอ่อนไหว ====
+            $sessionCookieName = (string) config('session.cookie', 'laravel_session');
+            $rawSessionCookie  = (string) $request->cookie($sessionCookieName, '');
+            $xsrfCookie        = (string) $request->cookie('XSRF-TOKEN', '');
+
+            $hasSessionCookie  = $rawSessionCookie !== '';
+            $hasXsrfCookie     = $xsrfCookie !== '';
+
+            // preview เพื่อ log แบบ mask (ไม่ log ค่าจริง)
+            $preview = function (?string $v, int $keepHead = 8): ?string {
+                if (!$v) return null;
+                $v = (string) $v;
+                if (strlen($v) <= $keepHead) return str_repeat('*', strlen($v));
+                return substr($v, 0, $keepHead) . '...';
+            };
+
+            // header ที่เกี่ยวข้อง (ไม่ log cookie ทั้งก้อน)
+            $hdr = [
+                'origin'   => (string) $request->headers->get('origin', ''),
+                'referer'  => (string) $request->headers->get('referer', ''),
+                'x_requested_with' => (string) $request->headers->get('x-requested-with', ''),
+                // X-XSRF-TOKEN header (จาก axios) — log แบบ mask
+                'x_xsrf_token_present' => $request->headers->has('x-xsrf-token'),
+                'x_xsrf_token_preview' => $preview($request->headers->get('x-xsrf-token')),
+            ];
+
+            // สถานะ session (กัน exception)
+            $hasSession = $request->hasSession();
+            $sessionStarted = null;
             $sessionIdPreview = null;
-        }
+            try {
+                if ($hasSession) {
+                    $sessionStarted   = $request->session()->isStarted();
+                    $sessionIdPreview = $preview($request->session()->getId());
+                }
+            } catch (\Throwable $se) {
+                $sessionStarted   = null;
+                $sessionIdPreview = null;
+            }
 
-        // ==== พยายาม resolve user ผ่าน guard 'web' (sanctum stateful) ====
-       $user = \Illuminate\Support\Facades\Auth::guard('web')->user();
+            // ==== พยายาม resolve user ผ่าน guard 'web' (sanctum stateful) ====
+            $user = \Illuminate\Support\Facades\Auth::guard('web')->user();
 
-        if (!$user) {
-            \Illuminate\Support\Facades\Log::warning('[ME] Unauthenticated', [
+            if (!$user) {
+                \Illuminate\Support\Facades\Log::warning('[ME] Unauthenticated', [
+                    'rid'     => $rid,
+                    'meta'    => $this->meta($request),
+                    'cookies' => [
+                        'session_cookie_name' => $sessionCookieName,
+                        'has_session_cookie'  => $hasSessionCookie,
+                        'session_cookie_preview' => $preview($rawSessionCookie),
+                        'has_xsrf_cookie'     => $hasXsrfCookie,
+                    ],
+                    'headers' => $hdr,
+                    'session' => [
+                        'has_session'     => $hasSession,
+                        'started'         => $sessionStarted,
+                        'session_id_preview' => $sessionIdPreview,
+                    ],
+                    'ms'      => round($this->ms($t0), 1),
+                ]);
+
+                return response()->json([
+                    'message' => 'Unauthenticated.',
+                    'code'    => 'UNAUTHENTICATED',
+                ], 401);
+            }
+
+            \Illuminate\Support\Facades\Log::info('[ME] Success', [
                 'rid'     => $rid,
-                'meta'    => $this->meta($request),
-                'cookies' => [
-                    'session_cookie_name' => $sessionCookieName,
-                    'has_session_cookie'  => $hasSessionCookie,
-                    'session_cookie_preview' => $preview($rawSessionCookie),
-                    'has_xsrf_cookie'     => $hasXsrfCookie,
-                ],
-                'headers' => $hdr,
+                'uid'     => $user->id,
                 'session' => [
-                    'has_session'     => $hasSession,
-                    'started'         => $sessionStarted,
+                    'has_session'        => $hasSession,
+                    'started'            => $sessionStarted,
                     'session_id_preview' => $sessionIdPreview,
+                ],
+                'cookies' => [
+                    'has_session_cookie' => $hasSessionCookie,
+                    'has_xsrf_cookie'    => $hasXsrfCookie,
                 ],
                 'ms'      => round($this->ms($t0), 1),
             ]);
 
+            // ✅ ไม่มี toArray() แล้ว
+            return response()->json($this->userPayload($user));
+
+        } catch (\Throwable $e) {
+            \Illuminate\Support\Facades\Log::error('[ME ERROR]', [
+                'rid'    => $rid,
+                'meta'   => $this->meta($request),
+                'error'  => $e->getMessage(),
+                'file'   => $e->getFile(),
+                'line'   => $e->getLine(),
+                'trace'  => config('app.debug') ? $e->getTraceAsString() : null,
+                'ms'     => round($this->ms($t0), 1),
+            ]);
+
             return response()->json([
-                'message' => 'Unauthenticated.',
-                'code'    => 'UNAUTHENTICATED',
-            ], 401);
+                'message' => 'เกิดข้อผิดพลาดระหว่างตรวจสอบสถานะผู้ใช้',
+                'code'    => 'ME_INTERNAL_ERROR',
+            ], 500);
         }
-
-        \Illuminate\Support\Facades\Log::info('[ME] Success', [
-            'rid'     => $rid,
-            'uid'     => $user->id,
-            'session' => [
-                'has_session'        => $hasSession,
-                'started'            => $sessionStarted,
-                'session_id_preview' => $sessionIdPreview,
-            ],
-            'cookies' => [
-                'has_session_cookie' => $hasSessionCookie,
-                'has_xsrf_cookie'    => $hasXsrfCookie,
-            ],
-            'ms'      => round($this->ms($t0), 1),
-        ]);
-
-        
-    return response()->json(
-        Arr::only($user, ['id','cid','first_name','last_name','email','role','status'])
-    );
-
-    } catch (\Throwable $e) {
-        \Illuminate\Support\Facades\Log::error('[ME ERROR]', [
-            'rid'    => $rid,
-            'meta'   => $this->meta($request),
-            'error'  => $e->getMessage(),
-            'file'   => $e->getFile(),
-            'line'   => $e->getLine(),
-            // แสดง trace เฉพาะตอน APP_DEBUG=true เพื่อลด noise ใน production
-            'trace'  => config('app.debug') ? $e->getTraceAsString() : null,
-            'ms'     => round($this->ms($t0), 1),
-        ]);
-
-        return response()->json([
-            'message' => 'เกิดข้อผิดพลาดระหว่างตรวจสอบสถานะผู้ใช้',
-            'code'    => 'ME_INTERNAL_ERROR',
-        ], 500);
     }
-}
 
     /**
      * POST /api/logout  (Sanctum Session)

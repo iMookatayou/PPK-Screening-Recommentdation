@@ -5,6 +5,7 @@ import { AlertTriangle, Search } from 'lucide-react'
 import { motion } from 'framer-motion'
 import LoadingSpinner from '@/app/components/ui/LoadingSpinner'
 import styles from './styles/SpecialDisease.module.css'
+import { authAxios } from '@/lib/axios'   // ✅ ใช้ instance ที่รองรับ Sanctum แล้ว
 
 interface Disease {
   id: number
@@ -69,47 +70,42 @@ export default function SpecialDiseaseSurveillancePage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all')
   const [loading, setLoading] = useState(true)
   const [showAlertPopup, setShowAlertPopup] = useState(false)
-
-  // helper: คืน base URL จาก ENV (กัน / ท้าย และกัน /api ซ้ำ)
-  function apiBase(): string {
-    const raw = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '').trim()
-    const base = raw === '' ? 'http://192.168.1.113:4002' : raw.replace(/\/+$/,'')
-    return base.endsWith('/api') ? base : `${base}/api`
-  }
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let alive = true
+    const ac = new AbortController()
 
-    const fetchDiseases = async () => {
+    async function fetchDiseases() {
+      setError(null)
+      setLoading(true)
       try {
-        const token = typeof window !== 'undefined' ? localStorage.getItem('token') : null
+        // ✅ ใช้ authAxios (Sanctum) — ไม่ต้อง credentials/Authorization เอง
+        const res = await authAxios.get('/diseases', { signal: ac.signal })
 
-        const headers: Record<string, string> = { Accept: 'application/json' }
-        if (token) headers.Authorization = `Bearer ${token}` // ใส่เฉพาะตอนมี token
+        // รองรับหลาย payload shapes
+        const raw = res.data
+        const list: unknown =
+          Array.isArray(raw) ? raw :
+          Array.isArray(raw?.data) ? raw.data :
+          Array.isArray(raw?.items) ? raw.items :
+          []
 
-        const res = await fetch(`${apiBase()}/diseases`, {
-          headers,
-          cache: 'no-store',     // กัน cache ค้าง
-          credentials: 'omit',   // ใช้ Bearer token ไม่ต้องส่งคุกกี้
-        })
+        if (!Array.isArray(list)) throw new Error('API response is not an array')
 
-        if (!res.ok) {
-          throw new Error(`HTTP ${res.status} ${res.statusText}`)
-        }
-
-        const data = await res.json()
-        if (!Array.isArray(data)) throw new Error('API response is not an array')
-
-        if (alive) setDiseases(data)
-      } catch (error) {
-        console.error('Failed to fetch diseases:', error)
+        if (alive) setDiseases(list as Disease[])
+      } catch (e: any) {
+        if (!alive) return
+        const msg = e?.message || 'โหลดข้อมูลล้มเหลว'
+        setError(msg)
+        console.error('Failed to fetch /diseases:', e)
       } finally {
         if (alive) setLoading(false)
       }
     }
 
     fetchDiseases()
-    return () => { alive = false }
+    return () => { alive = false; ac.abort() }
   }, [])
 
   const normSearch = useMemo(() => normalize(searchTerm), [searchTerm])
@@ -206,6 +202,8 @@ export default function SpecialDiseaseSurveillancePage() {
 
         {loading ? (
           <LoadingSpinner message="กำลังโหลดข้อมูล..." />
+        ) : error ? (
+          <div className={styles.errorBox}>{error}</div>
         ) : (
           <>
             {showAlertPopup && (
@@ -296,10 +294,7 @@ function CategoryTable({ title, rows }: { title: string; rows: Disease[] }) {
                 <tr key={d.id}>
                   <td>{d.name_th}</td>
                   <td>{d.name_en ?? '-'}</td>
-
-                  {/* --- ICD-10 cell with popover --- */}
                   <ICDCell value={d.icd_10 ?? '-'} />
-
                   <td>
                     {d.category === '2 ชั่วโมง'
                       ? <span className={styles.alertRed}>แจ้งภายใน 2 ชม.</span>
@@ -347,7 +342,6 @@ function ICDCell({ value }: { value: string }) {
   const wrapperRef = useRef<HTMLTableCellElement | null>(null)
   const touchTimer = useRef<number | null>(null)
 
-  // ปิดเมื่อคลิกนอก
   useEffect(() => {
     function onDocClick(e: MouseEvent) {
       if (!open) return
@@ -358,10 +352,6 @@ function ICDCell({ value }: { value: string }) {
     document.addEventListener('mousedown', onDocClick)
     return () => document.removeEventListener('mousedown', onDocClick)
   }, [open])
-
-  const show = () => setOpen(true)
-  const hide = () => setOpen(false)
-  const toggle = () => setOpen(v => !v)
 
   const onTouchStart = () => {
     if (touchTimer.current) window.clearTimeout(touchTimer.current)
@@ -385,19 +375,17 @@ function ICDCell({ value }: { value: string }) {
       ref={wrapperRef}
       title={value}
       aria-label={value}
-      onMouseEnter={show}
-      onMouseLeave={hide}
-      onFocus={show}
-      onBlur={hide}
-      onClick={toggle}        // รองรับคลิกเปิด/ปิด
-      onTouchStart={onTouchStart} // แตะค้างเปิดบน iPad/มือถือ
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+      onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
+      onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       style={{ position: 'relative', cursor: 'default' }}
     >
-      {/* ข้อความในเซลล์: ให้ตารางเดิมตัดด้วย ellipsis ตาม CSS เดิม */}
       <span title={value}>{value}</span>
 
-      {/* Popover */}
       {open && (
         <div
           role="dialog"

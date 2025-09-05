@@ -1,3 +1,4 @@
+// src/app/register/page.tsx
 'use client'
 
 import { useState, useRef } from 'react'
@@ -31,15 +32,13 @@ type FormState = {
   password: string
   password_confirmation: string
 }
-
 type ValidatedForm = FormState & { email: string }
 
 /* ------------------------------------------------------------------ */
 /* Lightweight Logger (frontend)                                       */
 /* ------------------------------------------------------------------ */
 type LogLevel = 'silent' | 'error' | 'warn' | 'info' | 'debug'
-const LOG_LEVEL: LogLevel =
-  (process.env.NEXT_PUBLIC_LOG_LEVEL as LogLevel) || 'debug'
+const LOG_LEVEL: LogLevel = (process.env.NEXT_PUBLIC_LOG_LEVEL as LogLevel) || 'debug'
 
 const levelPriority: Record<Exclude<LogLevel, 'silent'>, number> = {
   error: 1,
@@ -47,17 +46,14 @@ const levelPriority: Record<Exclude<LogLevel, 'silent'>, number> = {
   info: 3,
   debug: 4,
 }
-
 function canLog(level: Exclude<LogLevel, 'silent'>) {
   if (LOG_LEVEL === 'silent') return false
   if (LOG_LEVEL === 'error') return level === 'error'
   return (
-    levelPriority[level] <=
-      levelPriority[LOG_LEVEL as Exclude<LogLevel, 'silent'>] ||
+    levelPriority[level] <= levelPriority[LOG_LEVEL as Exclude<LogLevel, 'silent'>] ||
     LOG_LEVEL === 'debug'
   )
 }
-
 const maskEmail = (email: string) => {
   const [name, domain = ''] = email.split('@')
   if (!name) return email
@@ -70,14 +66,12 @@ const maskCID = (cid: string) => {
   const tail = cid.slice(-2)
   return `${head}${'*'.repeat(Math.max(0, cid.length - 5))}${tail}`
 }
-
 const log = {
   debug: (...args: any[]) => canLog('debug') && console.debug('[REG]', ...args),
   info: (...args: any[]) => canLog('info') && console.info('[REG]', ...args),
   warn: (...args: any[]) => canLog('warn') && console.warn('[REG]', ...args),
   error: (...args: any[]) => canLog('error') && console.error('[REG]', ...args),
 }
-
 function withGroupCollapsed(title: string, fn: () => void) {
   if (canLog('debug') || canLog('info') || canLog('warn') || canLog('error')) {
     console.groupCollapsed(title)
@@ -102,7 +96,6 @@ function InputRow({
   inputProps: React.InputHTMLAttributes<HTMLInputElement>
 }) {
   const [focused, setFocused] = useState(false)
-
   return (
     <motion.div
       className={styles.inputGroup}
@@ -192,9 +185,11 @@ export default function RegisterPage() {
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
-      log.info('KeyPress: Enter → submit')
       e.preventDefault()
-      handleSubmit()
+      if (!isSubmitting.current && !loading && !finished) {
+        log.info('KeyPress: Enter → submit')
+        handleSubmit()
+      }
     }
   }
 
@@ -238,10 +233,7 @@ export default function RegisterPage() {
       return fail('กรุณากรอกนามสกุล', 'E_LASTNAME_EMPTY')
     }
     if (formData.password.length < 8 || !/\d/.test(formData.password)) {
-      return fail(
-        'รหัสผ่านอย่างน้อย 8 ตัวและมีตัวเลขอย่างน้อย 1 ตัว',
-        'E_PASSWORD_WEAK'
-      )
+      return fail('รหัสผ่านอย่างน้อย 8 ตัวและมีตัวเลขอย่างน้อย 1 ตัว', 'E_PASSWORD_WEAK')
     }
     if (formData.password !== formData.password_confirmation) {
       return fail('รหัสผ่านและยืนยันรหัสผ่านไม่ตรงกัน', 'E_PASSWORD_NOT_MATCH')
@@ -283,8 +275,8 @@ export default function RegisterPage() {
         })
       })
 
-      await ensureCsrfCookie();
-       const res = await api.post('/register', {
+      await ensureCsrfCookie().catch(() => {})
+      const res = await api.post('/register', {
         ...formData,
         email, // ส่งตัวที่ trim/lower แล้ว
       })
@@ -316,7 +308,6 @@ export default function RegisterPage() {
         // สัญญา code/message/actions → popup
         const code = err?.response?.data?.code as string | undefined
         const msg = err?.response?.data?.message as string | undefined
-
         if (code && msg) {
           log.info('API contract error → popup', { code, message: msg })
           const apiPayload = err.response.data as ApiResponse
@@ -348,6 +339,15 @@ export default function RegisterPage() {
       setLoading(false)
     }
   }
+
+  const isInvalid =
+    formData.cid.length !== 13 ||
+    !formData.first_name.trim() ||
+    !formData.last_name.trim() ||
+    !/^[^\s@]+@[^\s@]+$/.test(formData.email.trim().toLowerCase()) ||
+    formData.password.length < 8 ||
+    !/\d/.test(formData.password) ||
+    formData.password !== formData.password_confirmation
 
   return (
     <div className={styles.registerBackground}>
@@ -396,6 +396,10 @@ export default function RegisterPage() {
                       onChange,
                       onKeyDown: handleKeyPress,
                       inputMode: 'numeric',
+                      pattern: '\\d{13}',
+                      autoComplete: 'off',
+                      autoCapitalize: 'none',
+                      autoCorrect: 'off',
                       maxLength: 13,
                       required: true,
                     }}
@@ -410,6 +414,7 @@ export default function RegisterPage() {
                       value: formData.first_name,
                       onChange,
                       onKeyDown: handleKeyPress,
+                      autoComplete: 'given-name',
                       required: true,
                     }}
                   />
@@ -423,6 +428,7 @@ export default function RegisterPage() {
                       value: formData.last_name,
                       onChange,
                       onKeyDown: handleKeyPress,
+                      autoComplete: 'family-name',
                       required: true,
                     }}
                   />
@@ -437,6 +443,9 @@ export default function RegisterPage() {
                       onChange,
                       onKeyDown: handleKeyPress,
                       inputMode: 'email',
+                      autoComplete: 'email',
+                      autoCapitalize: 'none',
+                      autoCorrect: 'off',
                       required: true,
                     }}
                   />
@@ -449,10 +458,7 @@ export default function RegisterPage() {
                         onClick={() => {
                           const next = !showPassword
                           setShowPassword(next)
-                          log.info(
-                            'Toggle password visibility:',
-                            next ? 'SHOW' : 'HIDE'
-                          )
+                          log.info('Toggle password visibility:', next ? 'SHOW' : 'HIDE')
                         }}
                       >
                         {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -465,6 +471,7 @@ export default function RegisterPage() {
                       value: formData.password,
                       onChange,
                       onKeyDown: handleKeyPress,
+                      autoComplete: 'new-password',
                       required: true,
                     }}
                   />
@@ -478,6 +485,7 @@ export default function RegisterPage() {
                       value: formData.password_confirmation,
                       onChange,
                       onKeyDown: handleKeyPress,
+                      autoComplete: 'new-password',
                       required: true,
                     }}
                   />
@@ -488,7 +496,7 @@ export default function RegisterPage() {
                     className={styles.primaryBtn}
                     type="button"
                     onClick={handleSubmit}
-                    disabled={loading}
+                    disabled={loading || isSubmitting.current || isInvalid}
                   >
                     สมัครสมาชิก
                   </button>
@@ -533,8 +541,8 @@ export default function RegisterPage() {
       {popupProps && (
         <ReusablePopup
           {...(() => {
-            // ตัด open ที่อาจเผลอปนมาจาก mapper ออก เพื่อกัน override
-            const { open: _drop, ...rest } = popupProps || {}
+            // กันไม่ให้ mapper override ค่า open/close ภายนอก
+            const { open: _drop, onClose: _drop2, ...rest } = popupProps || {}
             return rest
           })()}
           open={Boolean(popupOpen && popupProps)}

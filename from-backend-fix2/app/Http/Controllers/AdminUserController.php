@@ -8,10 +8,26 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
 use Carbon\Carbon;
 
-class AdminUserController extends Controller
+use Illuminate\Routing\Controllers\HasMiddleware;
+use Illuminate\Routing\Controllers\Middleware;
+
+class AdminUserController extends Controller implements HasMiddleware
 {
+
+    public static function middleware(): array
+    {
+        return [
+            new Middleware('auth:sanctum'),
+            new Middleware('throttle:120,1', only: [
+                'approveUser','rejectUser','allowReapply','blockReapply','destroy'
+            ]),
+        ];
+    }
+
+
     /* =========================
      * Sentinel (ไม่ใช้ NULL)
      * ========================= */
@@ -34,15 +50,57 @@ class AdminUserController extends Controller
         return (bool) $isAdmin;
     }
 
-    /** ลบโทเคนแบบปลอดภัย (กรณีไม่ได้ใช้ Sanctum จะไม่มีเมธอด tokens()) */
+    /** บังคับว่า actor ต้องเป็น admin */
+    protected function assertActorIsAdmin(Request $request): ?JsonResponse
+    {
+        $actor = $request->user(); // ทำงานได้ทั้ง sanctum cookie และ token
+        if (!$actor) {
+            return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
+        }
+        if (!$this->isAdmin($actor)) {
+            return response()->json(['message' => 'Forbidden', 'code' => 'FORBIDDEN_NOT_ADMIN'], 403);
+        }
+        return null;
+    }
+
+    /** ลบโทเคนแบบปลอดภัย (กรณีไม่ได้ใช้ Sanctum PAT จะไม่มีเมธอด tokens()) */
     protected function safeDeleteTokens(User $user): void
     {
         try {
             if (method_exists($user, 'tokens')) {
-                $user->tokens()->delete();
+                $user->tokens()->delete(); // Personal Access Tokens (กรณีบางระบบยังใช้)
             }
         } catch (\Throwable $e) {
             Log::warning('safeDeleteTokens failed', [
+                'user_id' => $user->id,
+                'err'     => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * เคลียร์ session อื่น ๆ ของผู้ใช้ (สำหรับ Sanctum cookie + session driver = database)
+     * - ต้องตั้ง SESSION_DRIVER=database และรันตาราง sessions แล้ว
+     * - จะคง session ปัจจุบันของแอดมินไว้ (ป้องกันเตะตัวเองหลุด)
+     */
+    protected function tryInvalidateUserSessions(User $user, ?Request $request = null): void
+    {
+        try {
+            if (Config::get('session.driver') !== 'database') {
+                return; // ถ้าไม่ใช่ database ก็ข้าม
+            }
+
+            $currentSessionId = null;
+            if ($request && $request->hasSession()) {
+                $currentSessionId = $request->session()->getId();
+            }
+
+            DB::table('sessions')
+                ->when($currentSessionId, fn($q) => $q->where('id', '!=', $currentSessionId))
+                ->where('user_id', (string) $user->getAuthIdentifier())
+                ->delete();
+        } catch (\Throwable $e) {
+            Log::warning('tryInvalidateUserSessions failed', [
                 'user_id' => $user->id,
                 'err'     => $e->getMessage(),
             ]);
@@ -72,6 +130,8 @@ class AdminUserController extends Controller
      * ========================= */
     public function index(Request $request)
     {
+        if ($resp = $this->assertActorIsAdmin($request)) return $resp;
+
         $data = $request->validate([
             'page'     => 'sometimes|integer|min:1',
             'per_page' => 'sometimes|integer|min:1|max:100',
@@ -170,6 +230,7 @@ class AdminUserController extends Controller
 
     public function getPendingUsers(Request $request)
     {
+        if ($resp = $this->assertActorIsAdmin($request)) return $resp;
         $request->merge(['status' => 'pending']);
         return $this->index($request);
     }
@@ -179,11 +240,9 @@ class AdminUserController extends Controller
      * ========================= */
     public function approveUser(Request $request, $id)
     {
-        $actor = $request->user();
-        if (!$actor) {
-            return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
-        }
+        if ($resp = $this->assertActorIsAdmin($request)) return $resp;
 
+        $actor = $request->user();
         $user = User::findOrFail($id);
 
         if ((int)$actor->id === (int)$user->id) {
@@ -229,7 +288,7 @@ class AdminUserController extends Controller
             );
         }
 
-        DB::transaction(function () use ($user) {
+        DB::transaction(function () use ($user, $request) {
             $user->forceFill([
                 'status'          => 'approved',
                 'approved_at'     => now(config('app.timezone', 'Asia/Bangkok')),
@@ -239,6 +298,7 @@ class AdminUserController extends Controller
             ])->save();
 
             $this->safeDeleteTokens($user);
+            $this->tryInvalidateUserSessions($user, $request);
         });
 
         return $this->respondPopup(
@@ -255,11 +315,9 @@ class AdminUserController extends Controller
      * ========================= */
     public function rejectUser(Request $request, $id)
     {
-        $actor = $request->user();
-        if (!$actor) {
-            return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
-        }
+        if ($resp = $this->assertActorIsAdmin($request)) return $resp;
 
+        $actor = $request->user();
         $user = User::findOrFail($id);
 
         if ((int)$actor->id === (int)$user->id) {
@@ -303,7 +361,7 @@ class AdminUserController extends Controller
             );
         }
 
-        DB::transaction(function () use ($user, $data) {
+        DB::transaction(function () use ($user, $data, $request) {
             $user->forceFill([
                 'status'          => 'rejected',
                 'approved_at'     => $this->epochDateTime(),
@@ -313,6 +371,7 @@ class AdminUserController extends Controller
             ])->save();
 
             $this->safeDeleteTokens($user);
+            $this->tryInvalidateUserSessions($user, $request);
         });
 
         return $this->respondPopup(
@@ -335,11 +394,9 @@ class AdminUserController extends Controller
      * ========================= */
     public function allowReapply(Request $request, $id)
     {
-        $actor = $request->user();
-        if (!$actor) {
-            return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
-        }
+        if ($resp = $this->assertActorIsAdmin($request)) return $resp;
 
+        $actor = $request->user();
         $user = User::findOrFail($id);
 
         if ((int)$actor->id === (int)$user->id) {
@@ -378,7 +435,7 @@ class AdminUserController extends Controller
         $untilCarbon = $allowDays ? Carbon::now($tz)->addDays($allowDays) : null;
         $untilStr = $untilCarbon ? $untilCarbon->toDateString() : $this->epochDate();
 
-        DB::transaction(function () use ($user, $untilStr) {
+        DB::transaction(function () use ($user, $untilStr, $request) {
             $user->forceFill([
                 'status'          => 'rejected',
                 'reapply_allowed' => true,
@@ -386,6 +443,7 @@ class AdminUserController extends Controller
             ])->save();
 
             $this->safeDeleteTokens($user);
+            $this->tryInvalidateUserSessions($user, $request);
         });
 
         return $this->respondPopup(
@@ -408,11 +466,9 @@ class AdminUserController extends Controller
      * ========================= */
     public function blockReapply(Request $request, $id)
     {
-        $actor = $request->user();
-        if (!$actor) {
-            return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
-        }
+        if ($resp = $this->assertActorIsAdmin($request)) return $resp;
 
+        $actor = $request->user();
         $user = User::findOrFail($id);
 
         if ((int)$actor->id === (int)$user->id) {
@@ -439,7 +495,7 @@ class AdminUserController extends Controller
             'reason' => 'nullable|string|max:255',
         ]);
 
-        DB::transaction(function () use ($user, $data) {
+        DB::transaction(function () use ($user, $data, $request) {
             $user->forceFill([
                 'status'          => 'rejected',
                 'approved_at'     => $this->epochDateTime(),
@@ -449,6 +505,7 @@ class AdminUserController extends Controller
             ])->save();
 
             $this->safeDeleteTokens($user);
+            $this->tryInvalidateUserSessions($user, $request);
         });
 
         return $this->respondPopup(
@@ -472,11 +529,9 @@ class AdminUserController extends Controller
      * ========================= */
     public function destroy(Request $request, $id)
     {
-        $actor = $request->user();
-        if (!$actor) {
-            return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
-        }
+        if ($resp = $this->assertActorIsAdmin($request)) return $resp;
 
+        $actor = $request->user();
         $user = User::findOrFail($id);
 
         // ห้ามลบตัวเอง
@@ -501,7 +556,10 @@ class AdminUserController extends Controller
             );
         }
 
+        // เตะออกจากระบบทั้งหมด
         $this->safeDeleteTokens($user);
+        $this->tryInvalidateUserSessions($user, $request);
+
         $user->delete(); // ถ้าใช้ SoftDeletes จะเป็น soft delete
 
         return response()->json([

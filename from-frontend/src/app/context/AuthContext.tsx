@@ -1,3 +1,4 @@
+// src/app/context/AuthContext.tsx
 'use client'
 
 import React, {
@@ -7,31 +8,51 @@ import React, {
   useState,
   useCallback,
   useRef,
+  type ReactNode,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { useRouter, usePathname } from 'next/navigation'
 import AnimatedLogo from '@/app/animatorlogo/AnimatedLogo'
 import LoadingDots from '@/app/components/ui/LoadingDots'
 
-// ใช้ Sanctum (cookie-based)
+// Sanctum (cookie-based)
 import {
-  api,              // axios instance with withCredentials=true
   fetchMe,          // GET /api/me
   ensureCsrfCookie, // GET /sanctum/csrf-cookie
-  logoutSession,    // POST /logout
+  logoutSession,    // POST /api/logout (ยิงผ่าน ROOT ใน axios.ts)
 } from '@/lib/axios'
 
+/* ========================= Types ========================= */
+type Role = 'user' | 'admin' | 'staff' | string
+type Status = 'pending' | 'approved' | 'rejected' | string
+export interface ApiUser {
+  id: number
+  cid: string
+  first_name: string
+  last_name: string
+  email: string
+  role: Role
+  status: Status
+}
+
 interface AuthContextType {
-  user: any
+  user: ApiUser | null
   loading: boolean
   isAuthenticated: boolean
   token: string | null
-  // NOTE: เก็บ signature เดิมไว้เพื่อไม่ให้โค้ดส่วนอื่นพัง
-  // ในโหมด Sanctum จะ "ไม่ใช้" token / expiresAt
-  login: (token: string | null, user: any, expiresAt?: string | null) => void
+  // คง signature เดิมเพื่อไม่ให้โค้ดส่วนอื่นพัง (โหมด Sanctum ไม่ใช้ token/expiresAt)
+  login: (token: string | null, user: ApiUser, expiresAt?: string | null) => void
   logout: () => void
   refreshUser: () => Promise<void>
 }
+
+/* ========================= Config ========================= */
+
+// เส้นทางที่ไม่ต้องล็อกอิน
+const publicPaths = new Set<string>(['/login', '/register', '/unauthorized'])
+const DEFAULT_AFTER_LOGIN = '/erdsppk'
+
+/* ========================= Context ========================= */
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
@@ -43,23 +64,20 @@ const AuthContext = createContext<AuthContextType>({
   refreshUser: async () => {},
 })
 
-// เส้นทางที่ไม่ต้องล็อกอิน
-const publicPaths = new Set<string>(['/login', '/register', '/unauthorized'])
-const DEFAULT_AFTER_LOGIN = '/erdsppk'
-
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<any>(null)
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
+  const [user, setUser] = useState<ApiUser | null>(null)
   const [loading, setLoading] = useState(true)
-  // โหมด Sanctum จะไม่มี token ให้เก็บ
-  const [token] = useState<string | null>(null)
+  const token: string | null = null // โหมด Sanctum: ไม่มี token
 
-  const [mounted, setMounted] = useState(false) // กัน SSR
+  const [mounted, setMounted] = useState(false) // กัน SSR mismatch
 
   const router = useRouter()
   const pathname = usePathname()
   const isPublic = publicPaths.has(pathname)
 
+  // กัน init เรียกซ้ำ & กัน redirect loop
   const initializedRef = useRef(false)
+  const lastRedirectRef = useRef<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -67,36 +85,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const logout = useCallback(async () => {
     try {
-      // เรียก logout ฝั่งเซิร์ฟเวอร์ (idempotent)
       await ensureCsrfCookie().catch(() => {})
       await logoutSession().catch(() => {})
     } catch {
-      // เงียบ ๆ ได้
+      // เงียบได้
     }
 
     setUser(null)
+
     try {
-      // sync ข้ามแท็บ
       localStorage.setItem('auth_event', JSON.stringify({ type: 'LOGOUT', at: Date.now() }))
     } catch {}
 
     if (!isPublic) {
-      router.replace('/login')
+      if (lastRedirectRef.current !== '/login') {
+        lastRedirectRef.current = '/login'
+        router.replace('/login')
+      }
     }
   }, [isPublic, router])
 
-  // login(): คง signature เดิมไว้ แต่ใน Sanctum จะ “สนใจเฉพาะ user”
+  // login(): คง signature เดิมไว้ แต่โหมด Sanctum ใช้เฉพาะ user
   const login = useCallback(
-    (_token: string | null, userObj: any, _expiresAt?: string | null) => {
+    (_token: string | null, userObj: ApiUser, _expiresAt?: string | null) => {
       setUser(userObj)
 
       try {
-        // sync ข้ามแท็บ
         localStorage.setItem('auth_event', JSON.stringify({ type: 'LOGIN', at: Date.now() }))
       } catch {}
 
       if (isPublic) {
-        router.replace(DEFAULT_AFTER_LOGIN)
+        if (lastRedirectRef.current !== DEFAULT_AFTER_LOGIN) {
+          lastRedirectRef.current = DEFAULT_AFTER_LOGIN
+          router.replace(DEFAULT_AFTER_LOGIN)
+        }
       }
     },
     [isPublic, router]
@@ -105,13 +127,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const refreshUser = useCallback(async () => {
     setLoading(true)
     try {
-      const me = await fetchMe()
+      const me = (await fetchMe()) as ApiUser
       setUser(me)
     } catch {
       // 401/419 → ถือว่าไม่ได้ล็อกอิน
       setUser(null)
-      if (!publicPaths.has(window.location.pathname)) {
-        router.replace('/login')
+      if (typeof window !== 'undefined' && !publicPaths.has(window.location.pathname)) {
+        if (lastRedirectRef.current !== '/login') {
+          lastRedirectRef.current = '/login'
+          router.replace('/login')
+        }
       }
     } finally {
       setLoading(false)
@@ -126,7 +151,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     ;(async () => {
       setLoading(true)
       try {
-        // ไม่จำเป็นต้องเรียก csrf ในการ GET /me
         await refreshUser()
       } finally {
         setLoading(false)
@@ -134,16 +158,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     })()
   }, [refreshUser])
 
-  // เปลี่ยนหน้า: ถ้าไม่ได้ล็อกอินและหน้าไม่ public → เด้งไป /login
+  // เปลี่ยนหน้า: ถ้าไม่ได้ล็อกอินและหน้าไม่ public → เด้ง /login
   // ถ้าล็อกอินแล้วแต่ไปหน้า public → เด้งไปหน้าในระบบ
   useEffect(() => {
-    if (loading || !mounted) return
+    if (!mounted || loading) return
 
     if (user && isPublic) {
-      router.replace(DEFAULT_AFTER_LOGIN)
+      if (lastRedirectRef.current !== DEFAULT_AFTER_LOGIN) {
+        lastRedirectRef.current = DEFAULT_AFTER_LOGIN
+        router.replace(DEFAULT_AFTER_LOGIN)
+      }
+      return
     }
     if (!user && !isPublic) {
-      router.replace('/login')
+      if (lastRedirectRef.current !== '/login') {
+        lastRedirectRef.current = '/login'
+        router.replace('/login')
+      }
     }
   }, [user, loading, isPublic, mounted, router])
 
@@ -156,7 +187,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (payload.type === 'LOGOUT') {
           setUser(null)
           if (!publicPaths.has(window.location.pathname)) {
-            router.replace('/login')
+            if (lastRedirectRef.current !== '/login') {
+              lastRedirectRef.current = '/login'
+              router.replace('/login')
+            }
           }
         }
         if (payload.type === 'LOGIN') {
@@ -168,11 +202,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => window.removeEventListener('storage', onStorage)
   }, [refreshUser, router])
 
-  // เงื่อนไขการแสดง overlay
-  const showOverlay =
-    loading ||
-    (!user && !isPublic) ||
-    (user && isPublic)
+  // ✅ ให้เป็น boolean ชัดเจน (แก้ error boolean | null)
+  const showOverlay: boolean =
+    Boolean(
+      loading ||
+      (!user && !isPublic) ||
+      (!!user && isPublic)
+    )
+
+  // ส่งค่า boolean ล้วน
+  const open = Boolean(mounted && showOverlay)
 
   return (
     <AuthContext.Provider
@@ -180,7 +219,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         user,
         loading,
         isAuthenticated: !!user,
-        token,       // จะเป็น null เสมอในโหมด Sanctum
+        token,       // null เสมอในโหมด Sanctum
         login,       // ใช้แค่อาร์กิวเมนต์ตัวที่ 2 (user)
         logout,
         refreshUser,
@@ -190,18 +229,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       {children}
 
       {/* Overlay ผ่าน Portal หลัง mount เพื่อกัน hydration mismatch */}
-      <FullPageOverlay open={mounted && showOverlay} />
+      <FullPageOverlay open={open} />
     </AuthContext.Provider>
   )
 }
 
-/** Overlay แบบ Method B: จองพื้นที่ LoadingDots + คุมด้วย visibility/opacity */
+/** Overlay ผ่าน portal; ถ้าไม่มี #modal-root จะ fallback ไป body */
 function FullPageOverlay({ open }: { open: boolean }) {
   const [portalHost, setPortalHost] = useState<HTMLElement | null>(null)
 
   useEffect(() => {
-    // หลัง mount ค่อยหา #modal-root
-    setPortalHost(document.getElementById('modal-root'))
+    const host = document.getElementById('modal-root') || document.body
+    setPortalHost(host)
   }, [])
 
   if (!portalHost || !open) return null
@@ -221,7 +260,6 @@ function FullPageOverlay({ open }: { open: boolean }) {
       }}
     >
       <AnimatedLogo />
-
       <div
         style={{
           height: 28,

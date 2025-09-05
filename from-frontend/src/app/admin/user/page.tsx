@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { motion } from 'framer-motion';
 import styles from './styles/AdminUsers.module.css';
 import LoadingSpinner from '@/app/components/ui/LoadingSpinner';
-import { authAxios } from '@/lib/axios';
+import { api, ensureCsrfCookie } from '@/lib/axios';
 import ModalPortal from '@/app/components/internal/ModalPortal';
 
 type Status = 'pending' | 'approved' | 'rejected';
@@ -93,13 +93,13 @@ export default function AdminUsersPage() {
       abortRef.current = controller;
 
       try {
-        const nextStatus = opts?.status ?? statusFilter; // ★
-        const res = await authAxios.get<ApiResponse>('/admin/users', {
+        const nextStatus = opts?.status ?? statusFilter;
+        const res = await api.get<ApiResponse>('/admin/users', {
           params: {
             page: opts?.page ?? page,
             per_page: PER_PAGE,
             q: (opts?.q ?? q) || undefined,
-            status: nextStatus === 'all' ? undefined : nextStatus, // ★ อย่าส่ง 'all'
+            status: nextStatus === 'all' ? undefined : nextStatus,
           },
           signal: controller.signal,
         });
@@ -107,12 +107,16 @@ export default function AdminUsersPage() {
         setMeta(res.data.meta);
         if (res.data.counts) setCounts(res.data.counts);
 
-        // ★ แจ้งให้ปุ่มแอดมินรีเฟรชเลข badge
+        // แจ้งให้ปุ่มแอดมินรีเฟรชเลข badge
         window.dispatchEvent(new Event('admin-pending-refresh'));
       } catch (err: any) {
         if (err?.name === 'CanceledError' || err?.code === 'ERR_CANCELED') return;
         const status = err?.response?.status;
-        if (status === 401 || status === 403) {
+        if (status === 401) {
+          router.replace('/login');
+          return;
+        }
+        if (status === 403) {
           router.replace('/unauthorized');
           return;
         }
@@ -125,7 +129,7 @@ export default function AdminUsersPage() {
     [page, q, statusFilter, addToast, router]
   );
 
-  // Actions
+  // Actions (PUT) — Sanctum ต้องมี CSRF → ensureCsrfCookie()
   const doAction = useCallback(
     async (
       id: number,
@@ -133,18 +137,20 @@ export default function AdminUsersPage() {
       payload?: any
     ) => {
       setActingId(id);
-      const prev = [...users]; // ★ clone เพื่อ rollback ปลอดภัย
-      const prevLength = prev.length; // ★ เก็บความยาวก่อนลบไว้คำนวณหน้า
-      // optimistic remove แถว
+      const prev = [...users];
+      const prevLength = prev.length;
+      // optimistic remove
       setUsers((curr) => curr.filter((u) => u.id !== id));
 
       try {
+        await ensureCsrfCookie(); // ✅ สำคัญสำหรับคำสั่งแก้ไข
+
         let url = `/admin/users/${id}/`;
         if (action === 'allow-reapply') url += 'allow-reapply';
         else if (action === 'block-reapply') url += 'block-reapply';
         else url += action; // approve | reject
 
-        await authAxios.put(url, payload);
+        await api.put(url, payload);
 
         let okMsg = 'ดำเนินการสำเร็จ';
         if (action === 'approve') okMsg = 'อนุมัติแล้ว';
@@ -154,11 +160,9 @@ export default function AdminUsersPage() {
 
         addToast({ type: 'success', message: okMsg, position: 'top-right' });
 
-        // ★ ถ้าแถวในหน้าก่อนลบเหลือ 1 และมีหลายหน้า → ถอยหน้าลง
         const nextPage = prevLength === 1 && page > 1 ? page - 1 : page;
         if (nextPage !== page) setPage(nextPage);
 
-        // ★ แจ้งให้ badge รีเฟรชทันที
         window.dispatchEvent(new Event('admin-pending-refresh'));
 
         fetchUsers({ page: nextPage, q, status: statusFilter });
@@ -178,7 +182,7 @@ export default function AdminUsersPage() {
           addToast({ type: 'error', message: msg, position: 'top-right' });
         }
         // rollback
-        setUsers(prev); // ★
+        setUsers(prev);
       } finally {
         setActingId(null);
       }
@@ -261,7 +265,6 @@ export default function AdminUsersPage() {
     }
     setPage(1);
     fetchUsers({ page: 1, q, status: statusFilter });
-    // optional cleanup: ยกเลิกเรียกที่ค้างเมื่อ unmount
     return () => abortRef.current?.abort();
   }, [user, authLoading, statusFilter, fetchUsers, router]);
 
@@ -471,35 +474,35 @@ export default function AdminUsersPage() {
       </div>
 
       {/* ===== Modal: ปฏิเสธ ===== */}
-        {rejectOpen && (
-          <ModalPortal lockScroll>
+      {rejectOpen && (
+        <ModalPortal lockScroll>
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rejectTitle"
+            aria-describedby="rejectHelp"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              background: 'rgba(0,0,0,0.35)',
+              display: 'grid',
+              placeItems: 'center',
+              zIndex: 10020,
+            }}
+            onClick={cancelReject}
+          >
             <div
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="rejectTitle"
-              aria-describedby="rejectHelp"
+              role="document"
+              onClick={(e) => e.stopPropagation()}
               style={{
-                position: 'fixed',
-                inset: 0,
-                background: 'rgba(0,0,0,0.35)',
-                display: 'grid',
-                placeItems: 'center',
-                zIndex: 10020,        // สูงกว่า Toast/overlay อื่น
+                width: 'min(560px, 92vw)',
+                background: '#fff',
+                borderRadius: 12,
+                border: '1px solid #e5e7eb',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                padding: 20,
               }}
-              onClick={cancelReject}
             >
-              <div
-                role="document"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  width: 'min(560px, 92vw)',
-                  background: '#fff',
-                  borderRadius: 12,
-                  border: '1px solid #e5e7eb',
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
-                  padding: 20,
-                }}
-              >
               <h3 id="rejectTitle" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
                 ปฏิเสธการอนุมัติผู้ใช้งาน
               </h3>
@@ -562,7 +565,7 @@ export default function AdminUsersPage() {
       )}
 
       {/* ===== Modal: อนุญาตสมัครใหม่ ===== */}
-       {reapplyOpen && (
+      {reapplyOpen && (
         <ModalPortal lockScroll>
           <div
             role="dialog"
@@ -574,23 +577,23 @@ export default function AdminUsersPage() {
               background: 'rgba(0,0,0,0.35)',
               display: 'grid',
               placeItems: 'center',
-              zIndex: 200000,       
+              zIndex: 200000,
               pointerEvents: 'auto',
             }}
             onClick={cancelAllowReapply}
-             >
+          >
             <div
-                role="document"
-                onClick={(e) => e.stopPropagation()}
-                style={{
-                  width: 'min(560px, 92vw)',
-                  background: '#fff',
-                  borderRadius: 12,
-                  border: '1px solid #e5e7eb',
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
-                  padding: 20,
-                }}
-              >
+              role="document"
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                width: 'min(560px, 92vw)',
+                background: '#fff',
+                borderRadius: 12,
+                border: '1px solid #e5e7eb',
+                boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+                padding: 20,
+              }}
+            >
               <h3 id="reapplyTitle" style={{ margin: 0, fontSize: 18, fontWeight: 700 }}>
                 อนุญาตให้สมัครใหม่
               </h3>
