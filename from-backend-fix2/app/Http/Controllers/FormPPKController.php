@@ -21,14 +21,12 @@ class FormPPKController extends Controller
     /* ---------------------------- Utilities ---------------------------- */
 
     /**
-     * มาตรฐาน API response ให้สม่ำเสมอเหมือน AdminController
-     *
-     * @param  string      $code       โค้ดเชิงธุรกิจ เช่น FORM_SAVED, CASE_NOT_FOUND
-     * @param  string      $message    ข้อความอ่านง่าย
-     * @param  array|null  $data       payload หลัก
-     * @param  array|null  $errors     รายละเอียด error (เช่น validation errors)
-     * @param  int         $httpStatus HTTP status code
-     * @param  array|null  $debug      แนบรายละเอียด exception (แสดงเฉพาะตอน APP_DEBUG=true)
+     * @param  string      $code
+     * @param  string      $message
+     * @param  array|null  $data
+     * @param  array|null  $errors
+     * @param  int         $httpStatus
+     * @param  array|null  $debug
      */
     protected function respondApi(
         string $code,

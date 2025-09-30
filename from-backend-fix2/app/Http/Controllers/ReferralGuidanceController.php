@@ -7,18 +7,26 @@ use App\Models\ReferralGuidance;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Str;
 use Carbon\Carbon;
 
 class ReferralGuidanceController extends Controller
 {
-    /**
-     * STORE – บันทึกข้อมูลคำแนะนำห้องตรวจ (หลายรายการ)
-     * รองรับ type เฉพาะ 'guide' หรือ 'referral'
-     */
     public function store(Request $request)
     {
-        Log::info('[Referral] เริ่มรับข้อมูล referral_guidances');
+        // สร้าง correlation id ให้ทุก log ของคำขอนี้ตามติดกันง่าย
+        $cid = (string) Str::uuid();
 
+        Log::info('[Referral][START] รับคำขอ', [
+            'cid'      => $cid,
+            'ip'       => $request->ip(),
+            'ua'       => $request->userAgent(),
+            'path'     => $request->path(),
+            'method'   => $request->method(),
+            // อย่า log body ทั้งก้อนไว้ใน prod — เสี่ยงข้อมูลส่วนบุคคล/ใหญ่เกิน
+        ]);
+
+        // 1) Validate
         $validator = Validator::make($request->all(), [
             'question_results'                     => 'required|array|min:1',
             'question_results.*.question'          => 'required|string',
@@ -31,33 +39,38 @@ class ReferralGuidanceController extends Controller
             'question_results.*.note'              => 'nullable|string',
             'question_results.*.is_refer_case'     => 'required|boolean',
             'question_results.*.type'              => 'required|string|in:guide,referral',
-            'question_results.*.created_at'        => 'nullable|date_format:Y-m-d H:i:s',
+            // แนะนำ: ไม่รับ created_at จาก client เพื่อลดจุดพัง format → เอา rule นี้ออก
+            // 'question_results.*.created_at'     => 'nullable|date_format:Y-m-d H:i:s',
         ], [
             'question_results.required'            => 'ต้องมีข้อมูลอย่างน้อย 1 รายการ',
             'question_results.*.type.in'           => 'type ต้องเป็น guide หรือ referral เท่านั้น',
             'question_results.*.clinic.required'   => 'ต้องระบุ clinic อย่างน้อย 1 ค่า',
-            'question_results.*.created_at.date_format' => 'created_at ต้องอยู่ในรูปแบบ Y-m-d H:i:s',
         ]);
 
         if ($validator->fails()) {
-            Log::warning('[Referral] Validation errors', $validator->errors()->toArray());
+            Log::warning('[Referral][VALIDATION_FAIL]', [
+                'cid'    => $cid,
+                // log เฉพาะ keys/จำนวน error พอ
+                'errors' => $validator->errors()->keys(),
+                'count'  => $validator->errors()->count(),
+            ]);
+
             return response()->json([
                 'message' => 'Validation failed',
                 'errors'  => $validator->errors(),
             ], 422);
         }
 
-        // ⬇⬇⬇ เปลี่ยนเป็นเก็บ user id (FK) ⬇⬇⬇
+        // 2) Auth
         $user = $request->user();
         if (!$user) {
+            Log::warning('[Referral][AUTH_FAIL] user is null', ['cid' => $cid]);
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
-        $userId = $user->id; // ใช้ค่า id ของผู้ใช้
-        // ⬆⬆⬆
+        $userId = $user->id;
 
+        // 3) Mapping
         $now = now();
-
-        // helper: clean array
         $cleanArray = function ($arr) {
             $arr = is_array($arr) ? $arr : [];
             $arr = array_map(fn($v) => is_string($v) ? trim($v) : '', $arr);
@@ -65,55 +78,101 @@ class ReferralGuidanceController extends Controller
             return array_values(array_unique($arr));
         };
 
-        // เตรียม rows
-        $rows = collect($validator->validated()['question_results'])->map(function ($d) use ($userId, $now, $cleanArray) {
+        $validated = $validator->validated();
+        $inputRows = $validated['question_results'];
+        Log::info('[Referral][MAPPING] เริ่ม map rows', [
+            'cid'        => $cid,
+            'rows_count' => is_countable($inputRows) ? count($inputRows) : null,
+        ]);
+
+        $rows = collect($inputRows)->map(function ($d) use ($userId, $now, $cleanArray) {
             $clinic   = $cleanArray($d['clinic']   ?? []);
             $symptoms = $cleanArray($d['symptoms'] ?? []);
 
             return [
                 'question'        => $d['question'],
-                'question_code'   => $d['question_code'],
+                'question_code'   => (int) $d['question_code'],
                 'question_title'  => $d['question_title'],
-                'clinic'          => $clinic,              // JSON (array → cast)
-                'symptoms'        => $symptoms,            // เก็บ [] แทน null
+                'clinic'          => $clinic,              // JSON cast
+                'symptoms'        => $symptoms,            // JSON cast
                 'note'            => $d['note'] ?? '',
-                'is_refer_case'   => (bool)($d['is_refer_case'] ?? false),
+                'is_refer_case'   => (bool) ($d['is_refer_case'] ?? false),
                 'type'            => $d['type'],           // 'guide' | 'referral'
-                'created_by'      => $userId,              // ⬅⬅⬅ ใช้ user id
-                'created_at'      => $d['created_at'] ?? $now,
+                'created_by'      => (int) $userId,
+                // ตรึงเวลาที่ server เพื่อลดปัญหา format/timezone
+                'created_at'      => $now,
                 'updated_at'      => $now,
             ];
         });
 
+        // sample log เฉพาะ 1 แถวแรก (mask ข้อมูลส่วนบุคคลเองถ้ามี)
+        $sample = $rows->first();
+        unset($sample['note']); // ตัวอย่าง: ไม่ log note ถ้ากังวล PII
+        Log::debug('[Referral][MAPPING_DONE] ตัวอย่างแถวแรก', ['cid' => $cid, 'sample' => $sample]);
+
+        // 4) DB Transaction + (optional) SQL listener สำหรับดีบัก
+        // (ปิดเมื่อขึ้น prod จริง ถ้ากังวลเรื่อง perf/log noise)
+        // DB::listen(fn($q) => Log::debug('[SQL]', ['cid'=>$cid, 'sql'=>$q->sql, 'time_ms'=>$q->time]));
+
         try {
-            DB::transaction(function () use ($rows) {
-                $rows->each(fn($row) => ReferralGuidance::create($row));
+            DB::transaction(function () use ($rows, $cid) {
+                $rows->each(function ($row, $i) use ($cid) {
+                    ReferralGuidance::create($row);
+                    if ($i < 1) { // log เฉพาะรายการแรกพอ
+                        Log::info('[Referral][CREATE_OK] แถวแรกถูกบันทึก', [
+                            'cid'  => $cid,
+                            'type' => $row['type'] ?? null,
+                        ]);
+                    }
+                });
             });
+
+            Log::info('[Referral][SUCCESS]', [
+                'cid'        => $cid,
+                'created'    => $rows->count(),
+                'created_by' => $userId,
+            ]);
 
             return response()->json([
                 'message' => 'บันทึกคำแนะนำสำเร็จ ' . $rows->count() . ' รายการ',
                 'errors'  => [],
             ], 201);
         } catch (\Throwable $e) {
-            Log::error('[Referral] บันทึกล้มเหลว', ['error' => $e->getMessage()]);
+            // ดึงข้อมูล error เต็ม ๆ (code/sqlstate/ไฟล์/บรรทัด)
+            $errCtx = [
+                'cid'   => $cid,
+                'msg'   => $e->getMessage(),
+                'code'  => method_exists($e, 'getCode') ? $e->getCode() : null,
+                'file'  => $e->getFile(),
+                'line'  => $e->getLine(),
+                // 'trace' => $e->getTraceAsString(), // เปิดเมื่อจำเป็นจริง ๆ (log จะยาวมาก)
+            ];
+            Log::error('[Referral][DB_FAIL]', $errCtx);
+
+            // ตัวอย่างตรวจ error FK เพื่อสื่อความชัดเจน (ไม่บังคับ)
+            if (str_contains($e->getMessage(), 'Integrity constraint violation')) {
+                return response()->json([
+                    'error'   => 'ไม่สามารถบันทึกข้อมูลได้ (FK constraint)',
+                    'details' => ['ตรวจสอบค่า created_by/user id และความถูกต้องของข้อมูล'],
+                    'cid'     => $cid,
+                ], 500);
+            }
+
             return response()->json([
                 'error'   => 'ไม่สามารถบันทึกข้อมูลได้',
-                'details' => [$e->getMessage()],
+                'details' => [config('app.debug') ? $e->getMessage() : 'Unexpected error'],
+                'cid'     => $cid,
             ], 500);
         }
     }
 
-    /**
-     * SUMMARY – สรุปสถิติคำแนะนำ
-     * Query:
-     *  - type: (optional) 'guide' | 'referral' | 'total' (default = total)
-     *  - start_date: (optional) 'YYYY-MM-DD'
-     *  - end_date:   (optional) 'YYYY-MM-DD'
-     */
     public function summary(Request $request)
     {
+        $cid = (string) Str::uuid();
+
         $user = $request->user();
         if (!$user) {
+            Log::warning('[Referral][SUMMARY][AUTH_FAIL]', ['cid' => $cid]);
             return response()->json(['message' => 'Unauthenticated.'], 401);
         }
 
@@ -121,13 +180,10 @@ class ReferralGuidanceController extends Controller
             'type'       => 'nullable|in:guide,referral,total',
             'start_date' => 'nullable|date_format:Y-m-d',
             'end_date'   => 'nullable|date_format:Y-m-d',
-        ], [
-            'type.in'                 => 'type ต้องเป็น guide, referral หรือ total เท่านั้น',
-            'start_date.date_format'  => 'start_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
-            'end_date.date_format'    => 'end_date ต้องอยู่ในรูปแบบ YYYY-MM-DD',
         ]);
 
         if ($validator->fails()) {
+            Log::warning('[Referral][SUMMARY][VALIDATION_FAIL]', ['cid' => $cid, 'errors' => $validator->errors()->keys()]);
             return response()->json([
                 'message' => 'Validation failed',
                 'errors'  => $validator->errors(),
@@ -138,7 +194,6 @@ class ReferralGuidanceController extends Controller
         $startDate = $request->query('start_date');
         $endDate   = $request->query('end_date');
 
-        // Normalize วันที่ให้ inclusive ตาม timezone
         $tz    = config('app.timezone', 'Asia/Bangkok');
         $start = $startDate ? Carbon::parse($startDate, $tz)->startOfDay() : null;
         $end   = $endDate   ? Carbon::parse($endDate, $tz)->endOfDay()   : null;
@@ -147,7 +202,7 @@ class ReferralGuidanceController extends Controller
             $types = match ($type) {
                 'guide'    => ['guide'],
                 'referral' => ['referral'],
-                default    => ['guide', 'referral'], // total
+                default    => ['guide', 'referral'],
             };
 
             $query = ReferralGuidance::query()
@@ -162,6 +217,12 @@ class ReferralGuidanceController extends Controller
 
             $summary = $query->get();
 
+            Log::info('[Referral][SUMMARY][SUCCESS]', [
+                'cid'        => $cid,
+                'type'       => $type,
+                'rows_count' => $summary->count(),
+            ]);
+
             return response()->json([
                 'message' => 'ดึงข้อมูลสรุปสำเร็จ',
                 'meta'    => [
@@ -174,10 +235,17 @@ class ReferralGuidanceController extends Controller
                 'data'    => $summary,
             ], 200);
         } catch (\Throwable $e) {
-            Log::error('[Referral] ดึง summary ล้มเหลว', ['error' => $e->getMessage()]);
+            Log::error('[Referral][SUMMARY][FAIL]', [
+                'cid'  => $cid,
+                'msg'  => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
             return response()->json([
                 'message' => 'ไม่สามารถดึงข้อมูลสรุปได้',
                 'error'   => config('app.debug') ? $e->getMessage() : 'Unexpected error',
+                'cid'     => $cid,
             ], 500);
         }
     }

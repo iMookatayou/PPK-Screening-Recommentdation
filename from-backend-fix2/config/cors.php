@@ -1,10 +1,13 @@
 <?php
 
+$envOrigins = env('CORS_ALLOWED_ORIGINS', 'http://localhost:4001,http://127.0.0.1:4001');
+$origins = array_values(array_filter(array_map('trim', explode(',', $envOrigins))));
+
 return [
 
     'paths' => [
         'api/*',
-        'sanctum/csrf-cookie',
+        'sanctum/csrf-cookie',  // ต้องมีสำหรับรับ XSRF-TOKEN
         'login',
         'logout',
         'me',
@@ -13,8 +16,8 @@ return [
 
     'allowed_methods' => ['*'],
 
-    // ❗ ห้ามใช้ '*' เพราะต้องส่งคุกกี้ ให้ระบุ origin ทีละตัว
-    'allowed_origins' => explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://127.0.0.1:3000')),
+    // ใช้รายการที่กรองแล้ว
+    'allowed_origins' => $origins,
 
     'allowed_origins_patterns' => [],
 
@@ -31,5 +34,6 @@ return [
 
     'max_age' => 0,
 
+    // ต้อง true สำหรับ cookie-based auth (Sanctum SPA)
     'supports_credentials' => true,
 ];

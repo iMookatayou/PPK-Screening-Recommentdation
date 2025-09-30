@@ -11,9 +11,9 @@ import React, {
 import { usePathname } from 'next/navigation'
 import { motion, AnimatePresence } from 'framer-motion'
 import { createPortal } from 'react-dom'
-import TopNavbar from './components/topbar/TopNavbar'
+import TopNavbar from './components/TopNavbar/TopNavbar'
 import Sidebar from './components/sidebar/Sidebar'
-import type { ThaiIDData } from '@/app/types/globalType'
+import type { ThaiIDData } from '@/types/globalType'
 
 /** ========= Config ========= */
 // ใช้ env ถ้ามี; ถ้าไม่ให้ fallback เป็น http://localhost:5000

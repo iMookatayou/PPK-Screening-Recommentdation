@@ -525,7 +525,7 @@ export default function PatientHistory() {
     <div className={styles.container}>
       <h2 className={styles.pageTitle}>
         <ClipboardList className={styles.titleIcon} aria-hidden />
-        <span>ประวัติผู้ป่วยจากการคัดกรอง - Patient history from screening</span>
+        <span>Patient history from screening - ประวัติผู้ป่วยจากการคัดกรอง</span>
       </h2>
 
       {/* Search card */}

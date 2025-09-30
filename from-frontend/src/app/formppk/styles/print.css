@@ -1,0 +1,8 @@
+@font-face {
+  font-family: 'Sarabun';
+  src: url('/fonts/Sarabun-Regular.woff2') format('woff2'); /* แก้ format ให้ถูก */
+}
+
+@media print {
+  body { -webkit-print-color-adjust: exact; }
+}

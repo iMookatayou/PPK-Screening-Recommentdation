@@ -5,9 +5,27 @@
 node_modules/
 public/storage
 storage/*.key
-storage/framework/*
+
+# เก็บโครงสร้าง storage/framework ไว้ แต่ไม่เอาไฟล์ข้างใน
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/storage/framework/testing/*
+!/storage/framework/testing/.gitignore
+
+# Laravel cache/compiled (อย่า ignore ทั้งโฟลเดอร์)
+/bootstrap/cache/*.php
+/bootstrap/cache/*.json
+!/bootstrap/cache/.gitignore
+
+# Logs/keys (เก็บโฟลเดอร์ไว้ แต่ไม่เอาไฟล์จริง)
 storage/logs/*
-bootstrap/cache/*
+!storage/logs/.gitignore
+
+# Env
 .env
 .env.local
 .env.*.backup
@@ -21,16 +39,16 @@ phpunit.xml.cache
 # =========================
 # --- Next.js (frontend)
 # =========================
-/from-frontend/node_modules/
-/from-frontend/.next/
-/from-frontend/out/
-/from-frontend/.turbo/
-/from-frontend/.vercel/
+/form-frontend/node_modules/
+/form-frontend/.next/
+/form-frontend/out/
+/form-frontend/.turbo/
+/form-frontend/.vercel/
 
 # Frontend env files (ignore local, allow example)
-from-frontend/.env
-from-frontend/.env.*
-!from-frontend/.env.frontend.example
+form-frontend/.env
+form-frontend/.env.*
+!form-frontend/.env.frontend.example
 
 # =========================
 # --- IDE & OS junk
@@ -42,7 +60,7 @@ from-frontend/.env.*
 Thumbs.db
 
 # =========================
-# --- Logs
+# --- Misc Logs
 # =========================
 npm-debug.log*
 yarn-debug.log*
