@@ -1,7 +1,6 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-// routes/web.php
 use App\Http\Controllers\AuthController;
 
 Route::prefix('api')->middleware('web')->group(function () {
