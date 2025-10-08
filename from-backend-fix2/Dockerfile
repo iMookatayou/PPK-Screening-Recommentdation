@@ -1,4 +1,3 @@
-# ===== Backend (Laravel) on PHP 8.3 CLI (Alpine) =====
 FROM php:8.3-cli-alpine
 
 WORKDIR /app
@@ -55,5 +54,4 @@ USER www-data
 
 EXPOSE 4002
 
-# ----- Run web server (ไม่มี migration/seed อัตโนมัติ) -----
 CMD ["sh", "-lc", "php artisan serve --host=0.0.0.0 --port=${APP_PORT}"]
