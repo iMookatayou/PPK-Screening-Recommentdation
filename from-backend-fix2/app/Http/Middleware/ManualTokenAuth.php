@@ -12,7 +12,7 @@ class ManualTokenAuth
 {
     public function handle(Request $request, Closure $next)
     {
-        // ----- 1) ดึง Bearer token -----
+        //Bearer token
         $plain = $request->bearerToken();
         if (!$plain) {
             return response()->json([
@@ -21,7 +21,7 @@ class ManualTokenAuth
             ], 401);
         }
 
-        // ----- 2) หา token record -----
+        //token record
         $token = PersonalAccessToken::findToken($plain);
         if (!$token) {
             return response()->json([
@@ -30,7 +30,7 @@ class ManualTokenAuth
             ], 401);
         }
 
-        // ----- 3) เตรียม cache schema flags -----
+        //cache schema flag
         static $hasRevokedCol, $hasRevokedReasonCol, $hasRevokedAtCol, $hasLastUsedAtCol, $hasDeviceLabelCol;
         if ($hasRevokedCol === null) {
             $table = $token->getTable();
@@ -41,7 +41,7 @@ class ManualTokenAuth
             $hasDeviceLabelCol    = Schema::hasColumn($table, 'device_label');
         }
 
-        // ----- 4) ตรวจ revoked / replaced -----
+        //revoked / replaced
         if ($hasRevokedCol && ($token->revoked ?? false)) {
             $reason = $hasRevokedReasonCol ? ($token->revoked_reason ?? 'REVOKED') : 'REVOKED';
             $code   = $reason === 'REPLACED' ? 'TOKEN_REPLACED' : 'TOKEN_REVOKED';
@@ -57,13 +57,13 @@ class ManualTokenAuth
                 $payload['at'] = $token->revoked_at->toDateTimeString();
             }
             if ($hasDeviceLabelCol && !empty($token->device_label)) {
-                $payload['by'] = (string) $token->device_label; // อุปกรณ์ที่ทำให้ถูกแทนที่ (ถ้าบันทึกไว้)
+                $payload['by'] = (string) $token->device_label; 
             }
 
             return response()->json($payload, 401);
         }
 
-        // ----- 5) ตรวจวันหมดอายุ -----
+        // ----- 5) ตรวจวันหมดอายุ
         if ($token->expires_at && now()->greaterThan($token->expires_at)) {
             return response()->json([
                 'message'    => 'Token หมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่',
@@ -72,7 +72,7 @@ class ManualTokenAuth
             ], 401);
         }
 
-        // ----- 6) ดึงผู้ใช้ & ตรวจสถานะ -----
+        //ดึงผู้ใช้ & ตรวจสถานะ
         $user = $token->tokenable;
         if (!$user) {
             return response()->json([
@@ -90,17 +90,17 @@ class ManualTokenAuth
             ], 403);
         }
 
-        // ----- 7) อัปเดต last_used_at (ถ้ามีคอลัมน์) -----
+        //last_used_at
         if ($hasLastUsedAtCol) {
             $token->forceFill(['last_used_at' => now()])->saveQuietly();
         }
 
-        // ----- 8) bind user + token -----
-        $authUser = $user->withAccessToken($token); // ให้ currentAccessToken() ใช้งานได้
+        //bind user + token
+        $authUser = $user->withAccessToken($token);
         Auth::setUser($authUser);
         $request->setUserResolver(fn () => $authUser);
 
-        // เก็บ token object เผื่อ middleware อื่นใช้ (optional)
+        //token object เผื่อ middleware
         $request->attributes->set('sanctum_token', $token);
 
         return $next($request); 
