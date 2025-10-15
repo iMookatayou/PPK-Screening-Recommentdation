@@ -9,7 +9,7 @@ class Authenticate extends Middleware
     protected function redirectTo($request): ?string
     {
         if ($request->expectsJson()) {
-            return null; // จะให้ตอบ JSON 401 แทน redirect
+            return null; 
         }
         return null;
     }
