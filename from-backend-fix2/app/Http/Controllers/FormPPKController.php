@@ -598,17 +598,15 @@ class FormPPKController extends Controller
             $s = $startDate ? Carbon::createFromFormat('Y-m-d', $startDate, $tz)->startOfDay() : null;
             $e = $endDate   ? Carbon::createFromFormat('Y-m-d', $endDate,   $tz)->endOfDay()   : null;
 
-            if ($s && !$e) $e = (clone $s)->endOfDay();      // วันเดียว
+            if ($s && !$e) $e = (clone $s)->endOfDay();    
             if ($e && !$s) $s = (clone $e)->startOfDay();
 
-            // ถ้าสลับลำดับ → สลับให้
             if ($s && $e && $s->greaterThan($e)) {
                 [$s, $e] = [$e->copy()->startOfDay(), $s->copy()->endOfDay()];
             }
             return [$s, $e];
         }
 
-        // 2) ใช้พรีเซ็ต range
         $r = strtolower((string)$range);
         switch ($r) {
             case 'today':
@@ -623,7 +621,7 @@ class FormPPKController extends Controller
                 break;
 
             case 'last_7d':
-                $start = $now->copy()->subDays(6)->startOfDay(); // รวมวันนี้ = 7 วัน
+                $start = $now->copy()->subDays(6)->startOfDay(); 
                 $end   = $now->copy()->endOfDay();
                 break;
 
