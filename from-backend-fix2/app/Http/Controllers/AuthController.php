@@ -20,26 +20,22 @@ class AuthController extends Controller
      |  Logging helpers (correlation id, timing, redaction)
      * ========================================================= */
 
-    /** ดึง/สร้าง request id (จาก header X-Request-Id ถ้าไม่มีจะสร้าง) */
     protected function requestId(Request $r): string
     {
         $rid = $r->header('X-Request-Id') ?: $r->header('x-request-id');
         return $rid ?: ('rid_' . bin2hex(random_bytes(8)));
     }
 
-    /** เริ่มจับเวลา */
     protected function t0(): float
     {
         return microtime(true);
     }
 
-    /** คำนวณ ms ระหว่าง t0 และตอนนี้ */
     protected function ms(float $t0): float
     {
         return (microtime(true) - $t0) * 1000.0;
     }
 
-    /** meta พื้นฐานของ request */
     protected function meta(Request $r): array
     {
         return [
@@ -51,7 +47,6 @@ class AuthController extends Controller
         ];
     }
 
-    /** ปิดบังข้อมูลอ่อนไหวใน payload */
     protected function redact(array $in): array
     {
         $out = $in;
@@ -62,8 +57,7 @@ class AuthController extends Controller
                 $out[$k] = '***hidden***';
             }
         }
-
-        // mask cid (โชว์ 3 ตัวแรก + ****** + 4 ตัวท้าย)
+        
         if (isset($out['cid'])) {
             $digits = preg_replace('/\D+/', '', (string) $out['cid']);
             if (strlen($digits) >= 7) {
@@ -76,13 +70,11 @@ class AuthController extends Controller
         return $out;
     }
 
-    /** กฎอีเมลแบบหลวม: แค่มี @ และมีตัวอักษรก่อน-หลัง @ ก็พอ (ไม่ต้องมี .com) */
     protected function looseEmailRule(): string
     {
         return 'regex:/^[^@\s]+@[^@\s]+$/';
     }
 
-    /** helper: ยังอยู่ในช่วงเปิดสิทธิ์สมัครใหม่หรือไม่ (รองรับ sentinel '1970-01-01') */
     protected function isReapplyWindowOpen(User $u): bool
     {
         if (!$u->reapply_allowed) return false;
@@ -94,10 +86,6 @@ class AuthController extends Controller
         return Carbon::now($tz)->startOfDay()->lte(Carbon::parse($until, $tz)->endOfDay());
     }
 
-    /**
-     * ทำ payload ผู้ใช้แบบปลอดภัย (เลี่ยงการใช้ ->toArray())
-     * @return array{id:int,cid:string,first_name:string,last_name:string,email:string,role:string,status:string}
-     */
     protected function userPayload(User $u): array
     {
         return [
@@ -467,8 +455,6 @@ class AuthController extends Controller
 
             $hasSessionCookie  = $rawSessionCookie !== '';
             $hasXsrfCookie     = $xsrfCookie !== '';
-
-            // preview เพื่อ log แบบ mask (ไม่ log ค่าจริง)
             $preview = function (?string $v, int $keepHead = 8): ?string {
                 if (!$v) return null;
                 $v = (string) $v;
@@ -476,17 +462,14 @@ class AuthController extends Controller
                 return substr($v, 0, $keepHead) . '...';
             };
 
-            // header ที่เกี่ยวข้อง (ไม่ log cookie ทั้งก้อน)
             $hdr = [
                 'origin'   => (string) $request->headers->get('origin', ''),
                 'referer'  => (string) $request->headers->get('referer', ''),
                 'x_requested_with' => (string) $request->headers->get('x-requested-with', ''),
-                // X-XSRF-TOKEN header (จาก axios) — log แบบ mask
                 'x_xsrf_token_present' => $request->headers->has('x-xsrf-token'),
                 'x_xsrf_token_preview' => $preview($request->headers->get('x-xsrf-token')),
             ];
 
-            // สถานะ session (กัน exception)
             $hasSession = $request->hasSession();
             $sessionStarted = null;
             $sessionIdPreview = null;
@@ -499,8 +482,7 @@ class AuthController extends Controller
                 $sessionStarted   = null;
                 $sessionIdPreview = null;
             }
-
-            // ==== พยายาม resolve user ผ่าน guard 'web' (sanctum stateful) ====
+            
             $user = \Illuminate\Support\Facades\Auth::guard('web')->user();
 
             if (!$user) {
@@ -543,7 +525,6 @@ class AuthController extends Controller
                 'ms'      => round($this->ms($t0), 1),
             ]);
 
-            // ✅ ไม่มี toArray() แล้ว
             return response()->json($this->userPayload($user));
 
         } catch (\Throwable $e) {
@@ -597,7 +578,6 @@ class AuthController extends Controller
                 'message' => $e->getMessage(),
                 'ms'      => round($this->ms($t0), 1),
             ]);
-            // logout เป็น idempotent ตอบ 200 ได้
         }
 
         return response()->json(['message' => 'ออกจากระบบแล้ว']);
