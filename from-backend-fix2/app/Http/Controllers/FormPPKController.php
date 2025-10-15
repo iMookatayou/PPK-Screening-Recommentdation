@@ -18,16 +18,6 @@ use Illuminate\Contracts\Support\Arrayable;
 use JsonSerializable;
 class FormPPKController extends Controller
 {
-    /* ---------------------------- Utilities ---------------------------- */
-
-    /**
-     * @param  string      $code
-     * @param  string      $message
-     * @param  array|null  $data
-     * @param  array|null  $errors
-     * @param  int         $httpStatus
-     * @param  array|null  $debug
-     */
     protected function respondApi(
         string $code,
         string $message,
@@ -50,22 +40,16 @@ class FormPPKController extends Controller
         return response()->json($payload, $httpStatus);
     }
 
-    /**
-     * แปลง QueryException เป็น status code ที่เหมาะสม
-     * - 23000/1062 (MySQL duplicate key) -> 409 Conflict
-     */
     protected function mapQueryExceptionStatus(QueryException $e): int
     {
-        $sqlState   = $e->getCode();              // e.g. 23000
-        $driverCode = $e->errorInfo[1] ?? null;   // e.g. 1062
+        $sqlState   = $e->getCode();              
+        $driverCode = $e->errorInfo[1] ?? null;
 
         if ($sqlState === '23000' || $driverCode === 1062) {
-            return 409; // duplicate / constraint violation
+            return 409; 
         }
         return 500;
     }
-
-    /* ----------------------------- Endpoints ----------------------------- */
 
     public function index(Request $request)
     {
@@ -128,7 +112,6 @@ class FormPPKController extends Controller
 
         $validated = $validator->validated();
 
-        // สิทธิการรักษา: ถ้าไม่ได้ส่ง/ว่าง → ตั้งข้อความมาตรฐาน
         $validated['maininscl_name'] = trim((string)($validated['maininscl_name'] ?? '')) ?: 'ไม่มีการบันทึกสิทธิการรักษา';
         $validated['hmain_name']     = trim((string)($validated['hmain_name'] ?? '')) ?: 'ไม่มีการบันทึกสิทธิการรักษา';
 
@@ -254,7 +237,7 @@ class FormPPKController extends Controller
             'question_results.*.note'                 => 'nullable|string',
             'question_results.*.is_refer_case'        => 'required_with:question_results|boolean',
             'question_results.*.type'                 => 'required_with:question_results|string|in:form,guide,referral,kiosk',
-            'question_results.*.created_by'           => 'nullable|integer|exists:users,id', // <-- แก้ตรงนี้
+            'question_results.*.created_by'           => 'nullable|integer|exists:users,id', 
             'question_results.*.created_at'           => 'nullable|date_format:Y-m-d H:i:s',
         ]);
 
@@ -274,7 +257,6 @@ class FormPPKController extends Controller
 
         try {
             return DB::transaction(function () use ($request, $patient, $validated, $main, $hmain) {
-                // ดึง user id สำหรับ fallback หาก FE ไม่ส่ง created_by มา
                 $currentUserId = $request->user()?->id ?? null;
 
                 $patient->update([
@@ -293,7 +275,6 @@ class FormPPKController extends Controller
                 ]);
 
                 if (!empty($validated['question_results'])) {
-                    // ลบของเดิมก่อนใส่ใหม่ (ยังคงพฤติกรรมเดิม)
                     $patient->questionResults()->delete();
 
                     $now  = now();
@@ -319,7 +300,6 @@ class FormPPKController extends Controller
                             'is_refer_case'   => (bool)($q['is_refer_case'] ?? false),
                             'type'            => trim((string)$q['type']),
 
-                            // เปลี่ยนเป็น created_by (FK) แทน routed_by(string)
                             'created_by'      => $q['created_by'] ?? $currentUserId,
 
                             'created_at'      => $q['created_at'] ?? $now,
@@ -332,7 +312,6 @@ class FormPPKController extends Controller
                     }
                 }
 
-                // เคลียร์ cache summary
                 $this->clearSummaryCaches();
 
                 return $this->respondApi('FORM_UPDATED', 'อัปเดตแบบฟอร์มสำเร็จ', [
@@ -368,7 +347,6 @@ class FormPPKController extends Controller
                 $patient->questionResults()->delete();
                 $patient->delete();
 
-                // เคลียร์ cache summary
                 $this->clearSummaryCaches();
 
                 return $this->respondApi('FORM_DELETED', 'ลบเคสสำเร็จ', [
@@ -398,7 +376,6 @@ class FormPPKController extends Controller
 
         $summary = $summaryService->getSummary('form', $startDate, $endDate);
 
-        // บังคับให้เป็น array ก่อนส่ง
         $summaryArr = is_array($summary)
             ? $summary
             : ( $summary instanceof \Illuminate\Contracts\Support\Arrayable ? $summary->toArray()
@@ -408,21 +385,6 @@ class FormPPKController extends Controller
         return $this->respondApi('SUMMARY_FETCHED', 'ดึงสรุปสำเร็จ', $summaryArr);
     }
 
-    /* ===================== NEW: ดูช่วงเวลาแบบ POST + พรีเซ็ต ===================== */
-
-    // routes/api.php:
-    // Route::post('/patients/history', [FormPPKController::class, 'historyPost']);
-    // Route::post('/form-ppk/show', [FormPPKController::class, 'showPost']);
-
-    /**
-     * POST /patients/history
-     * Body:
-     *  - cid: string (required)
-     *  - range: string in [today, yesterday, last_7d, last_30d, this_month, prev_month, this_quarter, this_year]
-     *  - start_date/end_date: YYYY-MM-DD (optional; override range if provided)
-     *  - q: string (optional; search in case_id/name)
-     *  - page, per_page
-     */
     public function historyPost(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -461,9 +423,7 @@ class FormPPKController extends Controller
                     });
                 })
                 ->orderByDesc('created_at')
-                // ต้องดึง symptoms มาด้วย เพื่อใช้เป็น headline
                 ->select(['id','case_id','cid','name','created_at','summary_clinics','symptoms'])
-                // ดึงหัวข้อรายการแรกจาก question_results ด้วย subquery (ไม่ทำ N+1)
                 ->addSelect([
                     'first_title' => QuestionResult::select('question_title')
                         ->whereColumn('case_id', 'patient_cases.case_id')
@@ -477,12 +437,9 @@ class FormPPKController extends Controller
 
             $p = $query->paginate($perPage);
 
-            // map ผลลัพธ์ให้อยู่ในรูปแบบเบา + มี headline
             $items = collect($p->items())->map(function ($c) {
-                // PatientCase มี cast 'symptoms' => 'array' อยู่แล้ว
                 $sym = $c->symptoms ?? [];
 
-                // กำหนด headline: symptoms(1–2 อันแรก) -> first_title -> first_question -> (สุดท้ายไม่มี)
                 $headline = null;
                 if (!empty($sym)) {
                     $headline = implode(', ', array_slice($sym, 0, 2));
@@ -491,12 +448,12 @@ class FormPPKController extends Controller
                 if (!$headline && !empty($c->first_question)) $headline = $c->first_question;
 
                 return [
-                    'case_id'         => $c->case_id,                                // ใช้เป็น key ภายใน FE
+                    'case_id'         => $c->case_id,                               
                     'name'            => $c->name,
                     'created_at'      => optional($c->created_at)->format('Y-m-d H:i:s'),
                     'summary_clinics' => $c->summary_clinics ?? [],
                     'symptoms'        => $sym,
-                    'headline'        => $headline,                                   // << ใหม่: โรค/อาการหลัก
+                    'headline'        => $headline,                               
                 ];
             })->all();
 
@@ -574,9 +531,6 @@ class FormPPKController extends Controller
         }
     }
 
-    /**
-     * เคลียร์ cache ของ SummaryService เพื่อให้ dashboard เห็นผลล่าสุด
-     */
     protected function clearSummaryCaches(): void
     {
         Cache::forget('summary_form');
@@ -584,11 +538,6 @@ class FormPPKController extends Controller
         Cache::forget('summary_combined');
     }
 
-    /* ------------------------------ Helpers ------------------------------ */
-
-    /**
-     * ตัดค่าว่าง/ไม่ใช่ string ออก และ trim ทุกค่า
-     */
     protected function cleanStringArray($array): array
     {
         $arr = is_array($array) ? $array : [];
@@ -597,19 +546,13 @@ class FormPPKController extends Controller
             $v = trim($v);
             return $v === '' ? null : $v;
         }, $arr)));
-        return array_values(array_unique($arr)); // กันซ้ำเพิ่ม
+        return array_values(array_unique($arr)); 
     }
-    /**
-     * ทำให้ symptoms เป็นภาษาไทยสวย ๆ:
-     * - กรอง *_note, note, within72, flag ออก
-     * - ถ้าทั้งหมดเป็น slug อังกฤษล้วนและมี $title → ใช้ $title เพียงตัวเดียว
-     * - ถ้าว่าง → fallback เป็น $title -> $key -> $question (โดยตัด *_note)
-     */
+
     protected function normalizeSymptoms($symptoms, ?string $title, ?string $key, ?string $question): array
     {
         $raw = $this->cleanStringArray($symptoms);
 
-        // กรองโน้ต/ธงที่ไม่ใช่อาการ
         $raw = array_values(array_filter($raw, function ($t) {
             $low = strtolower($t);
             if (preg_match('/(^|_)note$/i', $t)) return false;
@@ -617,7 +560,6 @@ class FormPPKController extends Controller
             return true;
         }));
 
-        // ถ้าเหลือเป็น slug อังกฤษล้วน → ใช้ title
         if (!empty($raw)) {
             $allSlug = true;
             foreach ($raw as $t) {
@@ -627,8 +569,7 @@ class FormPPKController extends Controller
             if ($allSlug && $title) {
                 return [trim($title)];
             }
-
-            // มีไทยอยู่แล้ว → normalize ช่องว่าง + unique
+            
             $clean = array_values(array_unique(array_map(function ($t) {
                 return preg_replace('/\s+/u', ' ', trim($t));
             }, $raw)));
@@ -636,7 +577,6 @@ class FormPPKController extends Controller
             if (!empty($clean)) return $clean;
         }
 
-        // Fallback
         foreach ([$title, $key, $question] as $cand) {
             if (is_string($cand)) {
                 $cand = trim($cand);
@@ -649,20 +589,11 @@ class FormPPKController extends Controller
         return [];
     }
 
-    /**
-     * แปลงช่วงวันที่ให้ง่ายสุด:
-     * - ถ้าส่ง start_date / end_date มา → ใช้คู่นั้น (ถ้าสลับลำดับจะสลับให้)
-     * - ถ้าไม่ส่ง → ใช้ range preset
-     * Supported range:
-     *   today, yesterday, last_7d, last_30d, this_month, prev_month, this_quarter, this_year
-     * คืนค่าเป็น [Carbon $startAt, $endAt] แบบ startOfDay/endOfDay โซน Asia/Bangkok
-     */
     protected function resolveDateRange(?string $startDate, ?string $endDate, ?string $range): array
     {
         $tz = 'Asia/Bangkok';
         $now = Carbon::now($tz);
 
-        // 1) ถ้ามี start/end มาก่อน → ใช้เลย
         if ($startDate || $endDate) {
             $s = $startDate ? Carbon::createFromFormat('Y-m-d', $startDate, $tz)->startOfDay() : null;
             $e = $endDate   ? Carbon::createFromFormat('Y-m-d', $endDate,   $tz)->endOfDay()   : null;
