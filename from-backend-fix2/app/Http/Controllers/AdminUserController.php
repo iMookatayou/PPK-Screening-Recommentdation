@@ -29,7 +29,7 @@ class AdminUserController extends Controller implements HasMiddleware
 
 
     /* =========================
-     * Sentinel (ไม่ใช้ NULL)
+     * Sentinel 
      * ========================= */
     protected function epochDateTime(): string { return '1970-01-01 00:00:01'; }
     protected function epochDate(): string     { return '1970-01-01'; }
@@ -39,21 +39,18 @@ class AdminUserController extends Controller implements HasMiddleware
      * Helpers
      * ========================= */
 
-    /** เช็คว่า target เป็นแอดมินหรือไม่ (อ่าน attribute ตรง ๆ ให้ถูกกับ Eloquent) */
     protected function isAdmin(User $u): bool
     {
         $role = $u->getAttribute('role');
         if ($role === 'admin') return true;
 
-        // เผื่อมีฟิลด์ is_admin ในสคีมาเก่า
         $isAdmin = $u->getAttribute('is_admin');
         return (bool) $isAdmin;
     }
-
-    /** บังคับว่า actor ต้องเป็น admin */
+    
     protected function assertActorIsAdmin(Request $request): ?JsonResponse
     {
-        $actor = $request->user(); // ทำงานได้ทั้ง sanctum cookie และ token
+        $actor = $request->user(); 
         if (!$actor) {
             return response()->json(['message' => 'Unauthenticated', 'code' => 'UNAUTHENTICATED'], 401);
         }
@@ -63,12 +60,11 @@ class AdminUserController extends Controller implements HasMiddleware
         return null;
     }
 
-    /** ลบโทเคนแบบปลอดภัย (กรณีไม่ได้ใช้ Sanctum PAT จะไม่มีเมธอด tokens()) */
     protected function safeDeleteTokens(User $user): void
     {
         try {
             if (method_exists($user, 'tokens')) {
-                $user->tokens()->delete(); // Personal Access Tokens (กรณีบางระบบยังใช้)
+                $user->tokens()->delete(); 
             }
         } catch (\Throwable $e) {
             Log::warning('safeDeleteTokens failed', [
@@ -78,16 +74,11 @@ class AdminUserController extends Controller implements HasMiddleware
         }
     }
 
-    /**
-     * เคลียร์ session อื่น ๆ ของผู้ใช้ (สำหรับ Sanctum cookie + session driver = database)
-     * - ต้องตั้ง SESSION_DRIVER=database และรันตาราง sessions แล้ว
-     * - จะคง session ปัจจุบันของแอดมินไว้ (ป้องกันเตะตัวเองหลุด)
-     */
     protected function tryInvalidateUserSessions(User $user, ?Request $request = null): void
     {
         try {
             if (Config::get('session.driver') !== 'database') {
-                return; // ถ้าไม่ใช่ database ก็ข้าม
+                return; 
             }
 
             $currentSessionId = null;
@@ -107,7 +98,6 @@ class AdminUserController extends Controller implements HasMiddleware
         }
     }
 
-    /** payload สำหรับแสดง Popup ฝั่ง FE */
     protected function respondPopup(User $user, string $code, string $message, array $extra = [], int $httpStatus = 200): JsonResponse
     {
         $payload = [
@@ -525,7 +515,6 @@ class AdminUserController extends Controller implements HasMiddleware
 
     /* =========================
      * DELETE /api/admin/users/{id}
-     * กันลบตัวเอง + กันลบแอดมิน
      * ========================= */
     public function destroy(Request $request, $id)
     {
@@ -534,7 +523,6 @@ class AdminUserController extends Controller implements HasMiddleware
         $actor = $request->user();
         $user = User::findOrFail($id);
 
-        // ห้ามลบตัวเอง
         if ((int)$actor->id === (int)$user->id) {
             return $this->respondPopup(
                 $user,
@@ -545,7 +533,6 @@ class AdminUserController extends Controller implements HasMiddleware
             );
         }
 
-        // ห้ามลบแอดมิน
         if ($this->isAdmin($user)) {
             return $this->respondPopup(
                 $user,
@@ -556,11 +543,10 @@ class AdminUserController extends Controller implements HasMiddleware
             );
         }
 
-        // เตะออกจากระบบทั้งหมด
         $this->safeDeleteTokens($user);
         $this->tryInvalidateUserSessions($user, $request);
 
-        $user->delete(); // ถ้าใช้ SoftDeletes จะเป็น soft delete
+        $user->delete(); 
 
         return response()->json([
             'code'    => 'DELETED',
