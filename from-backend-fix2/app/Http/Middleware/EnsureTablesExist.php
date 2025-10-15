@@ -13,17 +13,13 @@ class EnsureTablesExist
 {
     public function handle(Request $request, Closure $next, ...$unused)
     {
-        // เลือกชุดตารางจาก path: /api/<segment>
         $segment = (string) ($request->segment(2) ?? '');
         $required = $this->tablesFor($segment);
 
-        // ป้องกันเคสยังไม่เคย migrate อะไรเลย
         array_unshift($required, 'migrations');
 
-        // ไม่ซ้ำ
         $required = array_values(array_unique($required));
 
-        // allow bypass cache ด้วย ?no_cache=1 (ช่วยดีบัก)
         $useCache = ! $request->boolean('no_cache');
         $ttl = (int) config('dbready.cache_seconds', 10);
         $key = 'dbready:' . $segment . ':' . implode(',', $required);
@@ -31,7 +27,6 @@ class EnsureTablesExist
         $check = function () use ($required) {
             $missing = [];
             foreach ($required as $name) {
-                // รองรับรูปแบบ "tableA|tableB" = ใช้ได้ถ้ามีอย่างน้อยหนึ่งตัว
                 if (str_contains($name, '|')) {
                     $alts = array_filter(array_map('trim', explode('|', $name)));
                     $ok = false;
@@ -42,7 +37,7 @@ class EnsureTablesExist
                         }
                     }
                     if (! $ok) {
-                        $missing[] = $name; // รายงานทั้งชุดทางเลือก
+                        $missing[] = $name; 
                     }
                 } else {
                     if (! Schema::hasTable($name)) {
@@ -50,7 +45,7 @@ class EnsureTablesExist
                     }
                 }
             }
-            return $missing; // [] = พร้อม
+            return $missing; 
         };
 
         $missing = $useCache ? Cache::remember($key, $ttl, $check) : $check();
@@ -77,40 +72,35 @@ class EnsureTablesExist
         return $next($request);
     }
 
-    /**
-     * กำหนด "ชุดตารางที่จำเป็น" ตาม first segment ของ /api/<segment>
-     * หมายเหตุ: ใช้รูปแบบ 'question_result|question_results' เมื่อต้องการยอมรับชื่ออย่างใดอย่างหนึ่ง
-     */
     private function tablesFor(string $segment): array
     {
         return match ($segment) {
-            // ==== Auth / Profile ====
+            //Auth / Profile
             'me', 'user', 'logout-token' => [
                 'users', 'personal_access_tokens',
             ],
 
-            // ==== Referral Guidances ====
-            // ต้องมีตาราง referral_guidances และ question_result (หรือ question_results)
+            //Referral Guidances 
             'referral-guidances' => [
                 'users', 'personal_access_tokens',
                 'referral_guidances',
                 'question_result|question_results',
             ],
 
-            // ==== Form PPK / Patients ====
+            //Form PPK / Patients
             'form-ppk', 'patients' => [
                 'users', 'personal_access_tokens',
                 'patient_cases',
                 'question_result|question_results',
             ],
 
-            // ==== Diseases ====
+            //Diseases
             'diseases' => [
                 'users', 'personal_access_tokens',
                 'diseases',
             ],
 
-            // ==== Summary ====
+            //Summary
             'summary' => [
                 'users', 'personal_access_tokens',
                 'patient_cases',
@@ -118,12 +108,12 @@ class EnsureTablesExist
                 'question_result|question_results',
             ],
 
-            // ==== Admin (จัดการผู้ใช้) ====
+            //Admin
             'admin' => [
                 'users', 'personal_access_tokens',
             ],
 
-            // ==== ค่าเริ่มต้นสำหรับเส้นทางอื่น ๆ ====
+            //ค่าเริ่มต้นสำหรับเส้นทางอื่น ๆ
             default => [
                 'users', 'personal_access_tokens',
             ],
