@@ -14,7 +14,7 @@ class ReferralGuidanceController extends Controller
 {
     public function store(Request $request)
     {
-        // สร้าง correlation id ให้ทุก log ของคำขอนี้ตามติดกันง่าย
+       
         $cid = (string) Str::uuid();
 
         Log::info('[Referral][START] รับคำขอ', [
@@ -23,7 +23,6 @@ class ReferralGuidanceController extends Controller
             'ua'       => $request->userAgent(),
             'path'     => $request->path(),
             'method'   => $request->method(),
-            // อย่า log body ทั้งก้อนไว้ใน prod — เสี่ยงข้อมูลส่วนบุคคล/ใหญ่เกิน
         ]);
 
         // 1) Validate
@@ -93,32 +92,26 @@ class ReferralGuidanceController extends Controller
                 'question'        => $d['question'],
                 'question_code'   => (int) $d['question_code'],
                 'question_title'  => $d['question_title'],
-                'clinic'          => $clinic,              // JSON cast
-                'symptoms'        => $symptoms,            // JSON cast
+                'clinic'          => $clinic,              
+                'symptoms'        => $symptoms,            
                 'note'            => $d['note'] ?? '',
                 'is_refer_case'   => (bool) ($d['is_refer_case'] ?? false),
-                'type'            => $d['type'],           // 'guide' | 'referral'
+                'type'            => $d['type'],          
                 'created_by'      => (int) $userId,
-                // ตรึงเวลาที่ server เพื่อลดปัญหา format/timezone
                 'created_at'      => $now,
                 'updated_at'      => $now,
             ];
         });
 
-        // sample log เฉพาะ 1 แถวแรก (mask ข้อมูลส่วนบุคคลเองถ้ามี)
         $sample = $rows->first();
-        unset($sample['note']); // ตัวอย่าง: ไม่ log note ถ้ากังวล PII
+        unset($sample['note']); 
         Log::debug('[Referral][MAPPING_DONE] ตัวอย่างแถวแรก', ['cid' => $cid, 'sample' => $sample]);
-
-        // 4) DB Transaction + (optional) SQL listener สำหรับดีบัก
-        // (ปิดเมื่อขึ้น prod จริง ถ้ากังวลเรื่อง perf/log noise)
-        // DB::listen(fn($q) => Log::debug('[SQL]', ['cid'=>$cid, 'sql'=>$q->sql, 'time_ms'=>$q->time]));
 
         try {
             DB::transaction(function () use ($rows, $cid) {
                 $rows->each(function ($row, $i) use ($cid) {
                     ReferralGuidance::create($row);
-                    if ($i < 1) { // log เฉพาะรายการแรกพอ
+                    if ($i < 1) { 
                         Log::info('[Referral][CREATE_OK] แถวแรกถูกบันทึก', [
                             'cid'  => $cid,
                             'type' => $row['type'] ?? null,
@@ -138,18 +131,15 @@ class ReferralGuidanceController extends Controller
                 'errors'  => [],
             ], 201);
         } catch (\Throwable $e) {
-            // ดึงข้อมูล error เต็ม ๆ (code/sqlstate/ไฟล์/บรรทัด)
             $errCtx = [
                 'cid'   => $cid,
                 'msg'   => $e->getMessage(),
                 'code'  => method_exists($e, 'getCode') ? $e->getCode() : null,
                 'file'  => $e->getFile(),
                 'line'  => $e->getLine(),
-                // 'trace' => $e->getTraceAsString(), // เปิดเมื่อจำเป็นจริง ๆ (log จะยาวมาก)
             ];
             Log::error('[Referral][DB_FAIL]', $errCtx);
 
-            // ตัวอย่างตรวจ error FK เพื่อสื่อความชัดเจน (ไม่บังคับ)
             if (str_contains($e->getMessage(), 'Integrity constraint violation')) {
                 return response()->json([
                     'error'   => 'ไม่สามารถบันทึกข้อมูลได้ (FK constraint)',
