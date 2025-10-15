@@ -53,23 +53,19 @@ class SummaryController extends Controller
         $tz = config('app.timezone', 'Asia/Bangkok');
 
         try {
-            // วันเดียว → ใช้เป็นทั้ง start/end
             if (!$startDate && !$endDate && $oneDate) {
                 $startDate = $oneDate;
                 $endDate   = $oneDate;
             }
-            // กรอกมาไม่ครบ → เติมให้ครบ
             if ($startDate && !$endDate) $endDate = $startDate;
             if ($endDate && !$startDate) $startDate = $endDate;
 
-            // จัดช่วงวันให้เรียบร้อย
             if ($startDate && $endDate) {
                 $start = Carbon::parse($startDate, $tz)->startOfDay();
                 $end   = Carbon::parse($endDate, $tz)->endOfDay();
                 if ($start->greaterThan($end)) {
                     [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
                 }
-                // ส่งเป็น string YYYY-MM-DD (ส่วน logic endOfDay ให้ serviceจัดการเองตามต้องการ)
                 $startDate = $start->toDateString();
                 $endDate   = $end->toDateString();
             } else {
