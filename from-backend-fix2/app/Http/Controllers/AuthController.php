@@ -486,7 +486,6 @@ class AuthController extends Controller
                 'x_xsrf_token_preview' => $preview($request->headers->get('x-xsrf-token')),
             ];
 
-            // สถานะ session (กัน exception)
             $hasSession = $request->hasSession();
             $sessionStarted = null;
             $sessionIdPreview = null;
@@ -500,7 +499,6 @@ class AuthController extends Controller
                 $sessionIdPreview = null;
             }
 
-            // ==== พยายาม resolve user ผ่าน guard 'web' (sanctum stateful) ====
             $user = \Illuminate\Support\Facades\Auth::guard('web')->user();
 
             if (!$user) {
@@ -543,7 +541,6 @@ class AuthController extends Controller
                 'ms'      => round($this->ms($t0), 1),
             ]);
 
-            // ✅ ไม่มี toArray() แล้ว
             return response()->json($this->userPayload($user));
 
         } catch (\Throwable $e) {
